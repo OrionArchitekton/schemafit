@@ -1,0 +1,32 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install
+        run: pip install -e ".[dev]"
+      - name: Lint (ruff)
+        run: ruff check .
+      - name: Test (pytest)
+        run: pytest -q
+      - name: Self-proof (demo)
+        run: schemafit demo
+      - name: lint must FAIL on a known-bad schema (exit-code contract)
+        run: |
+          if schemafit lint fixtures/anthropic-bad.json --provider anthropic; then
+            echo "BUG: expected non-zero exit on a known-bad schema" >&2
+            exit 1
+          fi
+          echo "ok: bad schema correctly failed CI"
+      - name: lint must PASS on a clean schema
+        run: schemafit lint fixtures/portable-good.json --provider openai,anthropic,gemini

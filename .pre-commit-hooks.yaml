@@ -1,0 +1,8 @@
+- id: schemafit
+  name: schemafit (provider schema lint)
+  description: Lint JSON schemas against LLM provider constraints before commit.
+  entry: schemafit lint
+  language: python
+  types: [json]
+  require_serial: true
+  args: ["--provider", "openai,anthropic,gemini"]

@@ -1,0 +1,43 @@
+{
+  "provider": "openai",
+  "doc": "OpenAI strict structured-outputs / response_format constraints",
+  "rules": [
+    {
+      "id": "openai-additional-properties-false",
+      "kind": "object_requires",
+      "keyword": "additionalProperties",
+      "value": false,
+      "severity": "error",
+      "auto_repair": "set_false",
+      "reason": "OpenAI strict structured outputs require every object schema to set additionalProperties:false.",
+      "doc_url": "https://platform.openai.com/docs/guides/structured-outputs"
+    },
+    {
+      "id": "openai-all-properties-required",
+      "kind": "object_all_properties_required",
+      "severity": "error",
+      "auto_repair": "fill_required",
+      "reason": "OpenAI strict structured outputs require every defined property to appear in 'required' (model optionality via a nullable union instead).",
+      "doc_url": "https://platform.openai.com/docs/guides/structured-outputs"
+    },
+    {
+      "id": "openai-no-default",
+      "kind": "forbidden_keyword",
+      "keyword": "default",
+      "severity": "error",
+      "auto_repair": "strip",
+      "reason": "OpenAI structured outputs reject 'default' within a property definition.",
+      "doc_url": "https://github.com/openai/openai-agents-python/issues/474"
+    },
+    {
+      "id": "openai-no-oneof-in-array-items",
+      "kind": "forbidden_keyword_in_context",
+      "keyword": "oneOf",
+      "context": "array_items",
+      "severity": "error",
+      "auto_repair": "manual",
+      "reason": "OpenAI rejects 'oneOf' within the items definition of an array property (use anyOf).",
+      "doc_url": "https://github.com/openai/openai-agents-python/issues/474"
+    }
+  ]
+}

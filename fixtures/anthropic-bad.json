@@ -1,0 +1,9 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "sku": { "type": "string", "pattern": "^[A-Z]+$", "minLength": 3 },
+    "qty": { "type": "integer", "minimum": 1, "maximum": 999 }
+  },
+  "required": ["sku", "qty"]
+}

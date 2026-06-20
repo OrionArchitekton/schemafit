@@ -1,0 +1,41 @@
+{
+  "provider": "gemini",
+  "doc": "Gemini response_schema portability cautions. NOTE: Gemini's structured-output schema support has evolved fast — Gemini 2.5 added anyOf (Jan 2026) and the API added additionalProperties (Nov 2025); older models (<=2.0) and older python-genai SDK versions rejected them. These are therefore emitted as WARNINGS (version-sensitive portability cautions), not hard errors — use --strict to fail CI on them.",
+  "rules": [
+    {
+      "id": "gemini-anyof-version-sensitive",
+      "kind": "forbidden_keyword",
+      "keyword": "anyOf",
+      "severity": "warning",
+      "auto_repair": "manual",
+      "reason": "'anyOf' is supported by current Gemini 2.5 (Jan 2026) but raises 'AnyOf is not supported' on older Gemini models / older python-genai. Portability caution for older targets.",
+      "doc_url": "https://github.com/googleapis/python-genai/issues/460"
+    },
+    {
+      "id": "gemini-oneof-unsupported",
+      "kind": "forbidden_keyword",
+      "keyword": "oneOf",
+      "severity": "warning",
+      "auto_repair": "manual",
+      "reason": "Gemini's response schema models alternatives via 'anyOf', not 'oneOf'; 'oneOf' is not a documented response_schema keyword. Prefer anyOf.",
+      "doc_url": "https://ai.google.dev/gemini-api/docs/structured-output"
+    },
+    {
+      "id": "gemini-open-dict-version-sensitive",
+      "kind": "forbidden_additional_properties_schema",
+      "severity": "warning",
+      "auto_repair": "manual",
+      "reason": "Open-ended dict/map types (additionalProperties as a schema): the Gemini API added additionalProperties support (Nov 2025), but older python-genai rejects it client-side. Portability caution for older SDK versions.",
+      "doc_url": "https://github.com/googleapis/python-genai/issues/1815"
+    },
+    {
+      "id": "gemini-ref-recursion-risk",
+      "kind": "forbidden_keyword",
+      "keyword": "$ref",
+      "severity": "warning",
+      "auto_repair": "manual",
+      "reason": "Gemini may fail on '$ref' / self-referencing schemas (maximum recursion errors); inline or flatten the reference.",
+      "doc_url": "https://github.com/googleapis/python-genai/issues/460"
+    }
+  ]
+}

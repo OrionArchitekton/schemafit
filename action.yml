@@ -1,0 +1,39 @@
+name: "schemafit"
+description: "Lint JSON schemas / tool definitions against LLM provider constraints (fail CI before a 400)."
+branding:
+  icon: "check-circle"
+  color: "purple"
+inputs:
+  schema:
+    description: "Path(s) to the JSON schema file(s) to lint (space-separated)."
+    required: true
+  providers:
+    description: "Comma-separated providers: openai,anthropic,gemini"
+    required: false
+    default: "openai,anthropic,gemini"
+  strict:
+    description: "Fail (exit 1) on warnings as well as errors."
+    required: false
+    default: "false"
+runs:
+  using: "composite"
+  steps:
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+    - shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+      run: pip install "$ACTION_PATH"
+    # Inputs are passed via env (data, not code) to avoid shell injection.
+    - shell: bash
+      env:
+        SF_SCHEMA: ${{ inputs.schema }}
+        SF_PROVIDERS: ${{ inputs.providers }}
+        SF_STRICT: ${{ inputs.strict }}
+      run: |
+        set -euo pipefail
+        # shellcheck disable=SC2206  # word-splitting of SF_SCHEMA is intentional (space-separated paths)
+        args=(lint $SF_SCHEMA --provider "$SF_PROVIDERS")
+        if [ "$SF_STRICT" = "true" ]; then args+=(--strict); fi
+        schemafit "${args[@]}"
