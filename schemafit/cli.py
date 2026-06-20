@@ -2,6 +2,7 @@
 
 Commands:
   lint <schema.json> --provider openai[,anthropic,gemini]   # exit 1 on violations
+        [--format human|json|sarif] [--strict] [--live-verify]
   repair <schema.json> --provider <p> [--out fixed.json]
   providers
   demo                                                       # hermetic proof
@@ -12,9 +13,11 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from dataclasses import replace
 
 from . import __version__, report
 from .linter import PROVIDERS, has_errors, lint, lint_multi
+from .live import verify_providers
 from .repair import repair
 
 # A schema that is valid for OpenAI but deliberately trips Anthropic (rejected
@@ -52,6 +55,7 @@ def _parse_providers(spec: str) -> list[str]:
 def cmd_lint(args: argparse.Namespace) -> int:
     providers = _parse_providers(args.provider)
     all_results: dict[str, dict] = {}
+    live_all: dict[str, dict[str, bool | None]] = {}
     overall_fail = False
     for path in args.schemas:
         try:
@@ -63,18 +67,45 @@ def cmd_lint(args: argparse.Namespace) -> int:
         except RecursionError:
             print(f"error: schema {path!r} is too deeply nested to lint safely", file=sys.stderr)
             return 2
+
+        live_results = None
+        if args.live_verify:
+            live_results = verify_providers(schema, providers)
+            # Annotate each finding with its provider's live acceptance verdict.
+            for prov, lr in live_results.items():
+                results[prov] = [
+                    replace(f, confirmed_by_provider=lr.accepted) for f in results[prov]
+                ]
+            live_all[path] = {prov: lr.accepted for prov, lr in live_results.items()}
+
         all_results[path] = results
+
         if args.strict:
             failed = any(findings for findings in results.values())
         else:
             failed = any(has_errors(findings) for findings in results.values())
+        if args.live_verify:
+            # Fail-closed: a provider that actively REJECTED the schema fails CI,
+            # even if the static pass would not have. Abstain (None) does not.
+            failed = failed or any(v is False for v in live_all[path].values())
         overall_fail = overall_fail or failed
-        if args.format != "json":
+
+        if args.format == "human":
             if len(args.schemas) > 1:
                 print(f"== {path} ==")
             print(report.format_human(results))
+            if live_results is not None:
+                for prov in providers:
+                    lr = live_results[prov]
+                    print(
+                        f"[{prov}] LIVE-VERIFY confirmed_by_provider={lr.accepted} "
+                        f"client={lr.client} ({lr.detail})"
+                    )
+
     if args.format == "json":
-        print(report.format_json_multi(all_results))
+        print(report.format_json_multi(all_results, live_all or None))
+    elif args.format == "sarif":
+        print(report.format_sarif_multi(all_results))
     return 1 if overall_fail else 0
 
 
@@ -162,8 +193,18 @@ def build_parser() -> argparse.ArgumentParser:
     p_lint = sub.add_parser("lint", help="lint one or more schemas against one or more providers")
     p_lint.add_argument("schemas", nargs="+", help="schema JSON file(s) ('-' = stdin)")
     p_lint.add_argument("--provider", required=True, help="comma list: openai,anthropic,gemini")
-    p_lint.add_argument("--format", choices=("human", "json"), default="human")
+    p_lint.add_argument("--format", choices=("human", "json", "sarif"), default="human")
     p_lint.add_argument("--strict", action="store_true", help="also fail (exit 1) on warnings")
+    p_lint.add_argument(
+        "--live-verify",
+        dest="live_verify",
+        action="store_true",
+        help=(
+            "opt-in: confirm the schema against each provider via a mockable client "
+            "(MOCK default — no network/key; real call only when the provider's API key "
+            "is in the env). Fails closed on a provider rejection."
+        ),
+    )
     p_lint.set_defaults(func=cmd_lint)
 
     p_rep = sub.add_parser("repair", help="emit a best-effort provider-valid variant")

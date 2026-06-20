@@ -20,6 +20,11 @@ class Finding:
         reason: human-readable explanation.
         severity: "error" (fails CI) or "warning".
         doc_url: primary-source link documenting the constraint.
+        confirmed_by_provider: tri-state result of an optional ``--live-verify``
+            call. True if a live provider call confirmed the rejection, False if
+            the provider unexpectedly accepted it, None if not live-verified or
+            the call abstained (no key / rate-limited / network error). None on
+            the default static path, so serialization stays backward-compatible.
     """
 
     provider: str
@@ -32,6 +37,7 @@ class Finding:
     severity: str = "error"
     doc_url: str = ""
     auto_repair: str = "manual"  # strip | set_false | fill_required | manual
+    confirmed_by_provider: bool | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

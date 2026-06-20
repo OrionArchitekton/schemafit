@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "schemafit"
-version = "0.1.0"
+version = "0.2.0"
 description = "Provider-aware structured-output / JSON-Schema CI linter — fail CI before your schema 400s on OpenAI, Anthropic, or Gemini"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -28,6 +28,10 @@ Issues = "https://github.com/OrionArchitekton/schemafit/issues"
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0", "ruff>=0.6"]
+# `--live-verify` real provider calls use the standard library (urllib), so the
+# core stays dependency-free. This extra is reserved for optional provider SDKs;
+# it intentionally adds no dependency today.
+live = []
 
 [project.scripts]
 schemafit = "schemafit.cli:main"
