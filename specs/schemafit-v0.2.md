@@ -34,8 +34,6 @@ IN_DESIGN_ROW: item=live-verify | cli=lint --live-verify (opt-in like --strict, 
 
 ## Severity findings
 
-## Severity findings
-
 - **BLOCKING:** none. No live state contradicts any settled/locked value. The v0.2 worktree/branch/tag are expected-absent (research-before-build), not a contradiction.
 - **WARNING (W1):** Landscape verdict is **WEDGE-OPEN at *medium* confidence**, not high. Absence on PyPI/GitHub cannot be proven exhaustively, and LiteLLM already holds the per-provider constraint *knowledge* in its model-params map — so the moat is **packaging (offline rule-pack + CI/pre-commit/SARIF UX), not novel knowledge**. A single-provider OpenAI sanitizer extending to multi-provider + static CLI is the most likely fast-follow. This argues *for* shipping the convergent static cut now, not for over-investing in a wide v0.2.
 - **WARNING (W2):** New provider packs (Mistral, Cohere) MUST have every rule grounded in a **primary provider source** at build time. Any constraint that cannot be primary-sourced is `confidence:none` → **dropped, never invented** (no-invented-demand). A pack rule that needs a `kind` the linter doesn't dispatch requires an `apply_rule` clause **and** a `repair` strategy + tests (see Extension-Point Map).
