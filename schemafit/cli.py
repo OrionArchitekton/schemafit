@@ -217,7 +217,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_lint = sub.add_parser("lint", help="lint one or more schemas against one or more providers")
     p_lint.add_argument("schemas", nargs="+", help="schema JSON file(s) ('-' = stdin)")
     p_lint.add_argument(
-        "--provider", required=True, help="comma list: openai,anthropic,gemini,mistral,cohere"
+        "--provider", required=True, help=f"comma list: {','.join(PROVIDERS)}"
     )
     p_lint.add_argument("--format", choices=("human", "json", "sarif"), default="human")
     p_lint.add_argument("--strict", action="store_true", help="also fail (exit 1) on warnings")
@@ -236,7 +236,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_rep = sub.add_parser("repair", help="emit a best-effort provider-valid variant")
     p_rep.add_argument("schema", help="path to a JSON schema file, or '-' for stdin")
     p_rep.add_argument(
-        "--provider", required=True, help="one of: openai|anthropic|gemini|mistral|cohere"
+        "--provider", required=True, help=f"one of: {'|'.join(PROVIDERS)}"
     )
     p_rep.add_argument("--out", help="write fixed schema here (default: stdout)")
     p_rep.set_defaults(func=cmd_repair)
