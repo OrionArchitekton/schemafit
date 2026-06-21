@@ -1,0 +1,24 @@
+{
+  "provider": "mistral",
+  "doc": "Mistral custom structured outputs (response_format json_schema, strict:true) schema-node conventions; see https://docs.mistral.ai/capabilities/structured-output/custom_structured_output/ and the examples it links to. THIN pack: Mistral's docs do NOT enumerate a per-keyword 'unsupported features' list, so this pack adds NO keyword-blocklist rules (inventing one would violate primary-sourcing). The two rules below are EXAMPLE-DERIVED: Mistral's docs build strict structured outputs from json_schema definitions (the docs' Pydantic-model examples serialize to objects that set additionalProperties:false and list every property in 'required'). The docs do NOT state these as a prose MUST — they are observed conventions of the strict json_schema path, not documented hard rejections. API/model-level notes that are NOT lint rules: the request must use response_format json_schema with strict:true, and all models except codestral-mamba are supported.",
+  "rules": [
+    {
+      "id": "mistral-additional-properties-false",
+      "kind": "object_requires",
+      "keyword": "additionalProperties",
+      "value": false,
+      "severity": "error",
+      "auto_repair": "set_false",
+      "reason": "Mistral's custom structured-output example sets additionalProperties:false on each object (example-derived; the docs show but do not prose-mandate it).",
+      "doc_url": "https://docs.mistral.ai/capabilities/structured-output/custom_structured_output/"
+    },
+    {
+      "id": "mistral-all-properties-required",
+      "kind": "object_all_properties_required",
+      "severity": "error",
+      "auto_repair": "fill_required",
+      "reason": "Mistral's custom structured-output example lists every defined property in 'required' (example-derived; the docs show but do not prose-mandate it).",
+      "doc_url": "https://docs.mistral.ai/capabilities/structured-output/custom_structured_output/"
+    }
+  ]
+}

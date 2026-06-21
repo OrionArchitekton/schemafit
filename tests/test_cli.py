@@ -88,11 +88,17 @@ def test_providers_command(capsys):
     assert "anthropic" in capsys.readouterr().out
 
 
-def test_providers_matrix_is_exactly_three(capsys):
-    # v0.2 (AMBITIOUS cut) defers Mistral/Cohere packs to v0.3 — the matrix
-    # stays at the three v0.1 providers. Locks the cut against scope creep.
+def test_providers_matrix_is_exactly_five(capsys):
+    # v0.3 adds the Mistral + Cohere rule packs, taking the provider matrix 3->5.
+    # Locks the cut against scope creep (Bedrock/Vertex/JS-port stay deferred).
     assert main(["providers"]) == 0
-    assert capsys.readouterr().out.split() == ["openai", "anthropic", "gemini"]
+    assert capsys.readouterr().out.split() == [
+        "openai",
+        "anthropic",
+        "gemini",
+        "mistral",
+        "cohere",
+    ]
 
 
 def test_json_format_carries_confirmed_field_backward_compatible(tmp_path, capsys):

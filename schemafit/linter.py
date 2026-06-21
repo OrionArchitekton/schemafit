@@ -8,7 +8,7 @@ from importlib.resources import files
 from .model import Finding
 from .walk import walk
 
-PROVIDERS: tuple[str, ...] = ("openai", "anthropic", "gemini")
+PROVIDERS: tuple[str, ...] = ("openai", "anthropic", "gemini", "mistral", "cohere")
 
 _RULE_CACHE: dict[str, dict] = {}
 

@@ -45,7 +45,7 @@ Trusted Publishing; image to GHCR).
 
 ```bash
 # Lint one schema against several providers (exit 1 if any error):
-schemafit lint my-schema.json --provider openai,anthropic,gemini
+schemafit lint my-schema.json --provider openai,anthropic,gemini,mistral,cohere
 
 # Machine-readable output for CI annotations:
 schemafit lint my-schema.json --provider anthropic --format json
@@ -142,13 +142,15 @@ provider and **failing closed** on a rejection. It is **opt-in and key-gated**:
 > Never commit an API key. The real path reads keys only from the environment and
 > never echoes their value. Leave `--live-verify` out of default CI.
 
-## Supported providers (v0.2)
+## Supported providers (v0.3 — 5-provider matrix)
 
 | Provider | Checks (grounded in) |
 |---|---|
 | `openai` | `additionalProperties:false` required; all properties required; no `default`; no `oneOf` in array items ([openai-agents-python#474](https://github.com/openai/openai-agents-python/issues/474), [claude-task-master#1522](https://github.com/eyaltoledano/claude-task-master/issues/1522)) |
 | `anthropic` | 13 rejected validation keywords on the **strict structured-output surface**: `minLength`/`maxLength`/`pattern`/`format`/`minimum`/`maximum`/`exclusiveMinimum`/`exclusiveMaximum`/`minItems`/`maxItems`/`uniqueItems`/`minProperties`/`maxProperties` ([vercel/ai#13355](https://github.com/vercel/ai/issues/13355), [anthropic-sdk-python#1034](https://github.com/anthropics/anthropic-sdk-python/issues/1034)). General Messages-API tool `input_schema` is more permissive — run this pack against schemas you send on the structured-output path. |
 | `gemini` | **Portability warnings** (version-sensitive, non-failing by default): `anyOf` (rejected by ≤2.0 / old SDKs, supported by 2.5), `oneOf`, open dict (`additionalProperties` schema), `$ref` recursion. Gemini's schema support changed fast (`anyOf` Jan 2026, `additionalProperties` Nov 2025), so these *warn* — use `--strict` to gate on them. ([python-genai#460](https://github.com/googleapis/python-genai/issues/460), [docs](https://ai.google.dev/gemini-api/docs/structured-output)) |
+| `mistral` *(new in v0.3)* | Strict custom structured-output conventions: `additionalProperties:false` required and every property listed in `required`. **Thin pack** — Mistral's docs do not enumerate a per-keyword unsupported list, so no keyword-blocklist rules are invented; these two rules are *example-derived* from the official sample. Notes (not lint rules): the request must use `response_format: json_schema` with `strict:true`, and all models except `codestral-mamba` are supported. ([Mistral custom structured output](https://docs.mistral.ai/capabilities/structured-output/custom_structured_output/)) |
+| `cohere` *(new in v0.3)* | Hard-error unsupported structured-output keywords from Cohere's keyword-support table: composition `allOf`/`oneOf`/`not`; numeric ranges `minimum`/`maximum`; array-length `minItems`/`maxItems`; string-length `minLength`/`maxLength`; `uniqueItems` (marked unsupported for both structured-output columns — allowed only under regular Tool Use with `strict_tools=False`). Supported and **not** flagged: `anyOf`, `$ref`/`$def`, `enum`, `const`, `pattern`. Caveat (not yet a rule): regex anchors (`^`, `$`, `?=`, `?!`) *inside* a `pattern` are unsupported — anchor detection needs value-inspection and is deferred to v0.4. ([Cohere structured outputs](https://docs.cohere.com/docs/structured-outputs)) |
 
 ## Exit codes
 
@@ -160,17 +162,23 @@ provider and **failing closed** on a rejection. It is **opt-in and key-gated**:
 
 ## Scope and roadmap
 
-In scope now: the `lint` + `repair` core, three provider rule packs, human/JSON
-**and SARIF 2.1.0** reporters, an opt-in **`--live-verify`** confirmation mode,
-Docker image, GitHub Action, pre-commit hook.
+In scope now: the `lint` + `repair` core, **five** provider rule packs
+(OpenAI, Anthropic, Gemini, Mistral, Cohere), human/JSON **and SARIF 2.1.0**
+reporters, an opt-in **`--live-verify`** confirmation mode, Docker image,
+GitHub Action, pre-commit hook.
 
 Shipped in **v0.2**: SARIF output for GitHub code-scanning; the `--live-verify`
 opt-in live-confirmation mode (MOCK by default, key-gated real calls, fail-closed).
 
-Deferred (v0.3+): more provider rule packs (Mistral, Cohere, Bedrock, Vertex);
-automatic rule-pack **drift detection** (pairs with `--live-verify` over the live
-provider); a `pydantic` source-model auto-fix mode; and an npm/`ajv` port plus a
-Zod source-model for the JS/TS ecosystem.
+Shipped in **v0.3**: the **Mistral** and **Cohere** provider rule packs (provider
+matrix 3 → 5) — both static, network-free, and core-dependency-free.
+
+Deferred (v0.4+): Cohere's structural rules (top-level-must-be-object; every
+object ≥1 `required`) which need new rule kinds; automatic rule-pack **drift
+detection** (pairs with `--live-verify` over the live provider, built on the
+mock-client foundation); Bedrock/Vertex packs; a `pydantic` source-model
+auto-fix mode; and an npm/`ajv` port plus a Zod source-model for the JS/TS
+ecosystem.
 
 ## License
 

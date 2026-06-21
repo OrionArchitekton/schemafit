@@ -4,6 +4,40 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [0.3.0] - 2026-06-21
+
+### Added
+- **Cohere provider rule pack** — 10 hard-error rules for the JSON-Schema keywords
+  Cohere structured outputs do not support, taken from Cohere's keyword-support
+  table: composition (`allOf`/`oneOf`/`not`), numeric ranges (`minimum`/`maximum`),
+  array-length (`minItems`/`maxItems`), string-length (`minLength`/`maxLength`),
+  and `uniqueItems` (marked unsupported for both structured-output columns;
+  allowed only under regular Tool Use with `strict_tools=False`). Supported
+  keywords (`anyOf`, `$ref`/`$def`, `enum`, `const`, `pattern`) are not flagged.
+  Every rule is primary-sourced to
+  [docs.cohere.com/docs/structured-outputs](https://docs.cohere.com/docs/structured-outputs).
+  Regex anchors inside a `pattern` are also unsupported by Cohere, but detecting
+  them needs value-inspection (a new rule kind) and is deferred to v0.4.
+- **Mistral provider rule pack** (thin) — the strict custom-structured-output
+  conventions that are lintable at the schema-node level: `additionalProperties:false`
+  required and every property listed in `required`. Mistral's docs enumerate no
+  per-keyword unsupported list, so no keyword-blocklist rules were invented; both
+  rules are example-derived from the official sample and labelled as such. The
+  `strict:true` request flag and the `codestral-mamba` exclusion are API/model-level
+  and documented as README notes, not lint rules.
+- The provider matrix is now **5** (`openai`, `anthropic`, `gemini`, `mistral`,
+  `cohere`); the CI "clean schema passes" contract is extended to all five.
+
+### Notes
+- Core package stays **zero-dependency** (`dependencies = []`); the new packs are
+  declarative JSON and add no dependency. Both packs reuse the existing rule kinds
+  and auto-repair strategies — no new engine logic.
+- v0.1 and v0.2 surfaces are unchanged and still green: `lint`/`repair`/`providers`/`demo`,
+  the SARIF reporter, and `--live-verify` (mock-default, tri-state, fail-closed).
+- Deferred to **v0.4**: Cohere's structural rules (new rule kinds), rule-pack
+  drift detection, Bedrock/Vertex packs, a Pydantic source-model mode, and the
+  npm/`ajv` + Zod JS ecosystem port.
+
 ## [0.2.0] - 2026-06-20
 
 ### Added
