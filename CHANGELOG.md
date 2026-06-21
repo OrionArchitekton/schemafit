@@ -4,6 +4,36 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [0.2.0] - 2026-06-20
+
+### Added
+- **SARIF 2.1.0 output** (`lint --format sarif`) for GitHub code-scanning / the
+  Security tab. Maps each finding to a SARIF result (`ruleId`, `level`,
+  `message`, JSON-Pointer logical location, `helpUri` from the rule's primary
+  source). SARIF is emitted regardless of exit code; a clean schema produces a
+  valid run with an empty `results` array. A `--live-verify` provider rejection
+  is materialized as a first-class SARIF/JSON result (`<provider>-live-rejection`)
+  so a static-pass / live-reject run never emits an empty report while failing CI.
+  SARIF artifact URIs are normalized to forward slashes (valid RFC 3986 / Windows
+  paths). No new dependency (hand-emitted JSON).
+- **`--live-verify`** (`lint --live-verify`): an opt-in mode that confirms a
+  schema against each provider through a mockable client and **fails closed** on
+  a provider rejection. The default client is a deterministic, network-free MOCK
+  (no key required) used by the test suite and the Docker image; a real
+  stdlib-HTTP client is used only when the provider's API key is present in the
+  environment. Results are tri-state (`confirmed_by_provider`: accepted /
+  rejected / abstained); abstaining never fails CI. A `[live]` optional-extra is
+  reserved for provider SDKs and adds no dependency today.
+- `Finding.confirmed_by_provider` (tri-state) carries the live verdict in the
+  JSON/SARIF output; it is `null` on the default static path (backward-compatible).
+
+### Notes
+- Core package stays **zero-dependency** (`dependencies = []`); the static lint
+  path and the default `--live-verify` (MOCK) path make no network call.
+- The three v0.1 providers and the two CI exit-code contracts are unchanged.
+  Additional provider packs (Mistral/Cohere/Bedrock/Vertex) and rule-pack drift
+  detection are deferred to v0.3.
+
 ## [0.1.0] - 2026-06-20
 
 ### Added

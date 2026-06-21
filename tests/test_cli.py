@@ -88,6 +88,22 @@ def test_providers_command(capsys):
     assert "anthropic" in capsys.readouterr().out
 
 
+def test_providers_matrix_is_exactly_three(capsys):
+    # v0.2 (AMBITIOUS cut) defers Mistral/Cohere packs to v0.3 — the matrix
+    # stays at the three v0.1 providers. Locks the cut against scope creep.
+    assert main(["providers"]) == 0
+    assert capsys.readouterr().out.split() == ["openai", "anthropic", "gemini"]
+
+
+def test_json_format_carries_confirmed_field_backward_compatible(tmp_path, capsys):
+    # The new Finding.confirmed_by_provider serializes as null on the static path.
+    path = _write(tmp_path, {"type": "object", "properties": {"n": {"minLength": 1}}})
+    assert main(["lint", path, "--provider", "anthropic", "--format", "json"]) == 1
+    payload = json.loads(capsys.readouterr().out)
+    findings = payload[path]["anthropic"]["findings"]
+    assert findings and all(f["confirmed_by_provider"] is None for f in findings)
+
+
 def test_demo_command_proof(capsys):
     rc = main(["demo"])
     out = capsys.readouterr().out

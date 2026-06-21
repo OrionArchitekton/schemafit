@@ -50,6 +50,12 @@ schemafit lint my-schema.json --provider openai,anthropic,gemini
 # Machine-readable output for CI annotations:
 schemafit lint my-schema.json --provider anthropic --format json
 
+# SARIF 2.1.0 for GitHub code-scanning / the Security tab:
+schemafit lint my-schema.json --provider openai,anthropic --format sarif > schemafit.sarif
+
+# Confirm against the live provider (opt-in; MOCK unless a key is in the env):
+schemafit lint my-schema.json --provider openai --live-verify
+
 # Also fail on warnings (e.g. Gemini $ref recursion risk):
 schemafit lint my-schema.json --provider gemini --strict
 
@@ -99,7 +105,44 @@ Or directly / as a pre-commit hook (`.pre-commit-hooks.yaml` is included):
 > default `types: [json]` would otherwise lint every JSON file in the repo
 > (`package.json`, `tsconfig.json`, lockfiles), which are not LLM schemas.
 
-## Supported providers (v0.1)
+## GitHub code-scanning (SARIF)
+
+`--format sarif` emits [SARIF 2.1.0](https://sarifweb.azurewebsites.net/) so lint
+findings show up as annotations in the **Security → Code scanning** tab, with the
+exact JSON-Pointer path, the rule id, and the primary-source `helpUri`. SARIF is
+written to stdout regardless of the exit code, so code-scanning still ingests the
+artifact even when the gate fails (a clean schema produces a valid run with an
+empty `results` array, which clears stale alerts):
+
+```yaml
+- run: schemafit lint schemas/*.json --provider openai,anthropic,gemini --format sarif > schemafit.sarif
+  continue-on-error: true            # let code-scanning ingest the report
+- uses: github/codeql-action/upload-sarif@v3
+  with:
+    sarif_file: schemafit.sarif
+```
+
+## Live verification (`--live-verify`, opt-in)
+
+`--live-verify` turns *"the docs forbid this"* into *"the provider actually
+accepted/rejected it"* by sending a minimal structured-output probe to each
+provider and **failing closed** on a rejection. It is **opt-in and key-gated**:
+
+- **Default = MOCK** — with no provider key in the environment it uses a
+  deterministic, network-free client modeled on the static rule pack, so CI and
+  the Docker image run it with **no key and no network**.
+- **Real call** — only when the provider's key (`OPENAI_API_KEY`,
+  `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`) is present in the environment. Real calls
+  use the standard library (no new dependency); the `[live]` extra is reserved for
+  optional provider SDKs.
+- **Tri-state** — `confirmed_by_provider` is `true` (accepted), `false` (rejected
+  → exit 1), or `null` (abstained: no key / rate-limited / network error).
+  Abstaining is **not** a rejection and never fails CI.
+
+> Never commit an API key. The real path reads keys only from the environment and
+> never echoes their value. Leave `--live-verify` out of default CI.
+
+## Supported providers (v0.2)
 
 | Provider | Checks (grounded in) |
 |---|---|
@@ -115,15 +158,19 @@ Or directly / as a pre-commit hook (`.pre-commit-hooks.yaml` is included):
 | `1` | at least one error (CI fail) |
 | `2` | bad input (unreadable / invalid JSON) |
 
-## Scope (v0.1) and roadmap
+## Scope and roadmap
 
-In scope now: the `lint` + `repair` core, three provider rule packs, JSON/human
-reporters, Docker image, GitHub Action, pre-commit hook.
+In scope now: the `lint` + `repair` core, three provider rule packs, human/JSON
+**and SARIF 2.1.0** reporters, an opt-in **`--live-verify`** confirmation mode,
+Docker image, GitHub Action, pre-commit hook.
 
-Deferred (v0.2+): a `--live-verify` mode that calls each provider to confirm,
-an npm/`ajv` port for the JS/TS ecosystem, more providers (Mistral, Cohere,
-Bedrock, Vertex), automatic rule-pack drift detection, SARIF output, and
-source-model (Pydantic/Zod) auto-fix.
+Shipped in **v0.2**: SARIF output for GitHub code-scanning; the `--live-verify`
+opt-in live-confirmation mode (MOCK by default, key-gated real calls, fail-closed).
+
+Deferred (v0.3+): more provider rule packs (Mistral, Cohere, Bedrock, Vertex);
+automatic rule-pack **drift detection** (pairs with `--live-verify` over the live
+provider); a `pydantic` source-model auto-fix mode; and an npm/`ajv` port plus a
+Zod source-model for the JS/TS ecosystem.
 
 ## License
 
