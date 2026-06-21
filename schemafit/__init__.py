@@ -7,7 +7,7 @@ fail CI *before* the schema 400s in production on provider X.
 
 from __future__ import annotations
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 from .linter import PROVIDERS, has_errors, lint, lint_multi
 from .model import Finding

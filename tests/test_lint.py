@@ -150,8 +150,9 @@ def test_clean_schema_passes_all_providers():
 
 
 def test_unknown_provider_raises():
+    # 'mistral'/'cohere' became valid in v0.3 — use a still-unknown provider.
     with pytest.raises(ValueError):
-        lint({}, "mistral")
+        lint({}, "bedrock")
 
 
 def test_divergence_is_provider_specific():

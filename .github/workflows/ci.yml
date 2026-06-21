@@ -29,4 +29,4 @@ jobs:
           fi
           echo "ok: bad schema correctly failed CI"
       - name: lint must PASS on a clean schema
-        run: schemafit lint fixtures/portable-good.json --provider openai,anthropic,gemini
+        run: schemafit lint fixtures/portable-good.json --provider openai,anthropic,gemini,mistral,cohere
