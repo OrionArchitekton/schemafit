@@ -127,9 +127,20 @@ def _sarif_doc(items: list[tuple[str, Finding]]) -> dict:
     return {"$schema": SARIF_SCHEMA, "version": SARIF_VERSION, "runs": [_sarif_run(items)]}
 
 
+def _sarif_uri(path: str) -> str:
+    """Normalize a filesystem path to a valid SARIF artifact URI reference.
+
+    SARIF ``artifactLocation.uri`` must be an RFC 3986 URI reference, which uses
+    forward slashes. Windows paths use backslashes, which are invalid in a URI
+    and break SARIF viewers (incl. GitHub code-scanning), so convert them.
+    """
+    return "stdin" if path == "-" else path.replace("\\", "/")
+
+
 def format_sarif(results: dict[str, list[Finding]], uri: str = "schema.json") -> str:
     """SARIF for a single schema's per-provider findings."""
-    items = [(uri, f) for findings in results.values() for f in findings]
+    clean_uri = _sarif_uri(uri)
+    items = [(clean_uri, f) for findings in results.values() for f in findings]
     return json.dumps(_sarif_doc(items), indent=2, sort_keys=True)
 
 
@@ -137,7 +148,7 @@ def format_sarif_multi(all_results: dict[str, dict[str, list[Finding]]]) -> str:
     """SARIF across multiple schema files (one run, file path per result)."""
     items: list[tuple[str, Finding]] = []
     for path, results in all_results.items():
-        uri = "stdin" if path == "-" else path
+        uri = _sarif_uri(path)
         for findings in results.values():
             items.extend((uri, f) for f in findings)
     return json.dumps(_sarif_doc(items), indent=2, sort_keys=True)

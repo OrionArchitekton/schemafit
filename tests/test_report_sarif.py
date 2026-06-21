@@ -73,11 +73,12 @@ def test_sarif_stdin_path_renders_as_stdin_uri(tmp_path, capsys):
     import io
     import sys
 
+    old_stdin = sys.stdin
     sys.stdin = io.StringIO(json.dumps(schema))
     try:
         rc = main(["lint", "-", "--provider", "anthropic", "--format", "sarif"])
     finally:
-        sys.stdin = sys.__stdin__
+        sys.stdin = old_stdin
     out = capsys.readouterr().out
     assert rc == 1
     doc = json.loads(out)

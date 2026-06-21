@@ -145,6 +145,75 @@ def test_live_verify_annotates_findings_in_json(tmp_path, capsys):
     assert all(f["confirmed_by_provider"] is False for f in entry["findings"])
 
 
+def test_live_only_rejection_surfaces_in_json(monkeypatch, tmp_path, capsys):
+    # A static-pass schema that the (injected) provider rejects must materialize a
+    # first-class finding in JSON output — not just exit 1 with a PASS payload.
+    def _reject(schema, providers, **kwargs):
+        return {
+            p: LiveResult(p, accepted=False, client="openai", detail="injected reject")
+            for p in providers
+        }
+
+    monkeypatch.setattr("schemafit.cli.verify_providers", _reject)
+    args = ["lint", _write(tmp_path, _GOOD), "--provider", "openai", "--live-verify"]
+    rc = main([*args, "--format", "json"])
+    out = capsys.readouterr().out
+    assert rc == 1
+    payload = json.loads(out)
+    entry = next(iter(payload.values()))["openai"]
+    assert entry["status"] == "FAIL"
+    rule_ids = {f["rule_id"] for f in entry["findings"]}
+    assert "openai-live-rejection" in rule_ids
+
+
+def test_live_only_rejection_surfaces_in_sarif(monkeypatch, tmp_path, capsys):
+    # The same static-pass / live-reject case must emit a non-empty SARIF run, or
+    # GitHub code-scanning sees an empty results array and clears stale alerts.
+    def _reject(schema, providers, **kwargs):
+        return {
+            p: LiveResult(p, accepted=False, client="openai", detail="injected reject")
+            for p in providers
+        }
+
+    monkeypatch.setattr("schemafit.cli.verify_providers", _reject)
+    rc = main(
+        [
+            "lint",
+            _write(tmp_path, _GOOD),
+            "--provider",
+            "openai",
+            "--live-verify",
+            "--format",
+            "sarif",
+        ]
+    )
+    out = capsys.readouterr().out
+    assert rc == 1
+    doc = json.loads(out)
+    results = doc["runs"][0]["results"]
+    assert results, "SARIF must not be empty when a live rejection fails CI"
+    assert any(r["ruleId"] == "openai-live-rejection" for r in results)
+
+
+def test_live_abstain_does_not_synthesize_finding(monkeypatch, tmp_path, capsys):
+    # Abstain (None) is not a rejection: no synthetic finding, clean pass.
+    def _abstain(schema, providers, **kwargs):
+        return {
+            p: LiveResult(p, accepted=None, client="openai", detail="rate-limited")
+            for p in providers
+        }
+
+    monkeypatch.setattr("schemafit.cli.verify_providers", _abstain)
+    args = ["lint", _write(tmp_path, _GOOD), "--provider", "openai", "--live-verify"]
+    rc = main([*args, "--format", "json"])
+    out = capsys.readouterr().out
+    assert rc == 0
+    payload = json.loads(out)
+    entry = next(iter(payload.values()))["openai"]
+    assert entry["status"] == "PASS"
+    assert not any(f["rule_id"] == "openai-live-rejection" for f in entry["findings"])
+
+
 def test_no_live_verify_leaves_static_path_unchanged(tmp_path, capsys):
     # Without the flag: no LIVE-VERIFY output, unchanged exit codes.
     rc = main(["lint", _write(tmp_path, _BAD), "--provider", "anthropic"])

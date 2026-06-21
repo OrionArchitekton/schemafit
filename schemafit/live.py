@@ -110,7 +110,10 @@ def _build_request(provider: str, schema: object) -> tuple[str, dict, dict]:
     the provider validates. Best-effort and provider-version-sensitive; only
     reached on the opt-in, key-gated real path (never in default CI).
     """
-    key = os.environ[PROVIDER_KEY_ENV[provider]]
+    env_var = PROVIDER_KEY_ENV.get(provider)
+    if not env_var:  # defensive: PROVIDERS gained an entry without a real client
+        raise ValueError(f"no real live-verify client for provider {provider!r}")
+    key = os.environ[env_var]
     if provider == "openai":
         endpoint = "https://api.openai.com/v1/chat/completions"
         payload = {
@@ -179,10 +182,33 @@ class RealHTTPClient(ProviderClient):
     def verify(self, schema: object, provider: str) -> LiveResult:  # pragma: no cover - network
         try:
             status, body = self._request(schema)
-        except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        except Exception as exc:
+            # Any transport-layer failure abstains rather than crashing the CLI.
+            # http.client.HTTPException subclasses (IncompleteRead, BadStatusLine)
+            # do NOT inherit from OSError, so a narrow except would let them crash
+            # instead of safely abstaining. Abstain (None) != refutation.
             detail = f"abstain: transport error ({type(exc).__name__})"
             return LiveResult(provider, None, provider, detail)
-        return LiveResult(provider, interpret_response(status, body), provider, f"HTTP {status}")
+
+        detail = f"HTTP {status}"
+        if status == 400 and body:
+            # Surface the provider's own error message for debugging instead of a
+            # bare "HTTP 400". Best-effort; a parse failure falls back to a snippet.
+            try:
+                data = json.loads(body)
+                err = data.get("error") if isinstance(data, dict) else None
+                if isinstance(err, dict) and isinstance(err.get("message"), str):
+                    detail = f"HTTP 400: {err['message']}"
+                elif isinstance(err, str):
+                    detail = f"HTTP 400: {err}"
+                elif isinstance(data, dict) and isinstance(data.get("message"), str):
+                    detail = f"HTTP 400: {data['message']}"
+                else:
+                    detail = f"HTTP 400: {body[:200]}"
+            except (ValueError, AttributeError):
+                detail = f"HTTP 400: {body[:200]}"
+
+        return LiveResult(provider, interpret_response(status, body), provider, detail)
 
 
 def get_client(provider: str, *, allow_real: bool = True) -> ProviderClient:

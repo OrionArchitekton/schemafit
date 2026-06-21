@@ -18,6 +18,7 @@ from dataclasses import replace
 from . import __version__, report
 from .linter import PROVIDERS, has_errors, lint, lint_multi
 from .live import verify_providers
+from .model import Finding
 from .repair import repair
 
 # A schema that is valid for OpenAI but deliberately trips Anthropic (rejected
@@ -76,6 +77,29 @@ def cmd_lint(args: argparse.Namespace) -> int:
                 results[prov] = [
                     replace(f, confirmed_by_provider=lr.accepted) for f in results[prov]
                 ]
+                # Fail-closed reporting parity: a provider that actively REJECTED
+                # the schema must surface as a first-class finding so the rejection
+                # appears in JSON and SARIF (not only the exit code). Otherwise a
+                # static-pass / live-reject run exits 1 while emitting an EMPTY
+                # SARIF run, which GitHub code-scanning treats as "all clear" and
+                # can clear stale alerts. Abstain (None) is not a rejection.
+                if lr.accepted is False:
+                    results[prov].append(
+                        Finding(
+                            provider=prov,
+                            rule_id=f"{prov}-live-rejection",
+                            kind="live-rejection",
+                            node_pointer="#",
+                            json_pointer="#",
+                            keyword="",
+                            reason=(
+                                f"Live provider verification rejected the schema "
+                                f"({lr.client}): {lr.detail}"
+                            ),
+                            severity="error",
+                            confirmed_by_provider=lr.accepted,
+                        )
+                    )
             live_all[path] = {prov: lr.accepted for prov, lr in live_results.items()}
 
         all_results[path] = results

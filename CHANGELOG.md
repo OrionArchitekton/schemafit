@@ -11,7 +11,11 @@ All notable changes to this project are documented here. The format follows
   Security tab. Maps each finding to a SARIF result (`ruleId`, `level`,
   `message`, JSON-Pointer logical location, `helpUri` from the rule's primary
   source). SARIF is emitted regardless of exit code; a clean schema produces a
-  valid run with an empty `results` array. No new dependency (hand-emitted JSON).
+  valid run with an empty `results` array. A `--live-verify` provider rejection
+  is materialized as a first-class SARIF/JSON result (`<provider>-live-rejection`)
+  so a static-pass / live-reject run never emits an empty report while failing CI.
+  SARIF artifact URIs are normalized to forward slashes (valid RFC 3986 / Windows
+  paths). No new dependency (hand-emitted JSON).
 - **`--live-verify`** (`lint --live-verify`): an opt-in mode that confirms a
   schema against each provider through a mockable client and **fails closed** on
   a provider rejection. The default client is a deterministic, network-free MOCK
