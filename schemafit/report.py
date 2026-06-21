@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from urllib.parse import quote
 
 from . import __version__
 from .model import Finding
@@ -130,11 +131,20 @@ def _sarif_doc(items: list[tuple[str, Finding]]) -> dict:
 def _sarif_uri(path: str) -> str:
     """Normalize a filesystem path to a valid SARIF artifact URI reference.
 
-    SARIF ``artifactLocation.uri`` must be an RFC 3986 URI reference, which uses
-    forward slashes. Windows paths use backslashes, which are invalid in a URI
-    and break SARIF viewers (incl. GitHub code-scanning), so convert them.
+    SARIF ``artifactLocation.uri`` must be an RFC 3986 URI reference. We:
+
+    * map stdin (``-``) to the conventional ``stdin`` URI,
+    * convert Windows backslashes to forward slashes (path separators), and
+    * percent-encode characters that are unsafe/reserved in a URI path
+      (spaces, ``#``, ``?``, ``%``, ...), keeping ``/`` as the separator.
+
+    Raw backslashes/spaces/fragments otherwise break SARIF viewers, including
+    GitHub code-scanning, which can reject or mislocate the report.
     """
-    return "stdin" if path == "-" else path.replace("\\", "/")
+    if path == "-":
+        return "stdin"
+    # safe="/" keeps path separators literal; everything unsafe is percent-encoded.
+    return quote(path.replace("\\", "/"), safe="/")
 
 
 def format_sarif(results: dict[str, list[Finding]], uri: str = "schema.json") -> str:

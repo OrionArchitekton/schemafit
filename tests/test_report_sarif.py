@@ -90,6 +90,22 @@ def test_sarif_stdin_path_renders_as_stdin_uri(tmp_path, capsys):
     assert uris == {"stdin"}
 
 
+def test_sarif_uri_normalizes_separators_and_encodes_unsafe_chars():
+    # Backslashes become forward slashes (path separators kept literal); spaces,
+    # '#', '?', '%' and other URI-unsafe chars are percent-encoded so the
+    # artifactLocation.uri is a valid RFC 3986 reference for SARIF consumers.
+    results = lint_multi(
+        {"type": "object", "properties": {"n": {"type": "string", "minLength": 1}}}, ["anthropic"]
+    )
+    run = json.loads(format_sarif(results, uri=r"sub dir\a#b.json"))["runs"][0]
+    uris = {
+        loc["physicalLocation"]["artifactLocation"]["uri"]
+        for r in run["results"]
+        for loc in r["locations"]
+    }
+    assert uris == {"sub%20dir/a%23b.json"}
+
+
 def test_cli_format_sarif_preserves_exit_codes(tmp_path, capsys):
     bad = tmp_path / "bad.json"
     bad.write_text(json.dumps({"type": "object", "properties": {"n": {"minLength": 1}}}))
