@@ -4,6 +4,24 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [0.4.0] - 2026-06-28
+
+### Added
+- **Cohere structural rules** (TIGHT v0.4 cut per MAP) — two new `apply_rule` kinds:
+  `root_must_be_object` (top-level schema must be `type: object`) and
+  `object_min_one_required` (every object schema, including nested, must have
+  at least one field in `required`). Implemented as data-driven rules in the
+  cohere pack (primary-sourced to docs.cohere.com/docs/structured-outputs).
+  New fixture `fixtures/cohere-structural-bad.json`; extended tests cover both
+  failure modes + no regression on `portable-good` across all 5 providers.
+  No change to CLI surface, core deps remain `[]`, prior surface untouched.
+
+### Notes
+- This completes the static Cohere pack surface for the documented structural
+  constraints. Rule-pack drift detection, Pydantic, Bedrock/Vertex, and npm/Zod
+  ports remain DEFERRED (see MAP). All proofs hermetic (CLI, pytest, ruff, docker).
+- v0.1–v0.3 surfaces unchanged and green.
+
 ## [0.3.0] - 2026-06-21
 
 ### Added

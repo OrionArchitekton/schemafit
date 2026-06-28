@@ -100,6 +100,19 @@ def apply_rule(
             if isinstance(node.get("additionalProperties"), dict):
                 out.append(mk(ptr, _join(ptr, "additionalProperties"), "additionalProperties"))
 
+    elif kind == "root_must_be_object":
+        for ptr, node, _ctx in nodes:
+            if ptr == "#" and not _is_object_schema(node):
+                out.append(mk(ptr, ptr, "type"))
+
+    elif kind == "object_min_one_required":
+        for ptr, node, _ctx in nodes:
+            if _is_object_schema(node):
+                req = node.get("required")
+                if not isinstance(req, list) or len(req) == 0:
+                    json_ptr = _join(ptr, "required") if "required" in node else ptr
+                    out.append(mk(ptr, json_ptr, "required"))
+
     else:  # defensive: unknown rule kind in a pack
         raise ValueError(f"unknown rule kind: {kind!r} (rule {rule.get('id')!r})")
 

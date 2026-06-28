@@ -149,3 +149,27 @@ def test_new_bad_fixtures_pass_unaffected_providers():
     mistral_bad = json.loads((FIXTURES / "mistral-bad.json").read_text())
     assert not has_errors(lint(cohere_bad, "mistral"))
     assert not has_errors(lint(mistral_bad, "cohere"))
+
+
+# --- v0.4 Cohere structural (new rule kinds: root_must_be_object + object_min_one_required) ---
+
+def test_cohere_structural_bad_fixture_fails():
+    """New structural rules (TIGHT per MAP): root must be object + every object >=1 required."""
+    import json
+    bad = json.loads((FIXTURES / "cohere-structural-bad.json").read_text())
+    findings = lint(bad, "cohere")
+    assert has_errors(findings)
+    got = _ids(findings)
+    assert "cohere-root-must-be-object" in got
+    assert "cohere-object-min-required" in got
+
+
+def test_cohere_structural_rules_do_not_regress_portable_good():
+    """portable-good must still PASS all 5 providers (including cohere with new rules)."""
+    import json
+    schema = json.loads((FIXTURES / "portable-good.json").read_text())
+    results = lint_multi(schema, list(PROVIDERS))
+    for provider, findings in results.items():
+        assert not has_errors(findings), (
+            f"{provider} portable-good regression with structural rules"
+        )

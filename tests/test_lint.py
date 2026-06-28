@@ -190,3 +190,35 @@ def test_forbidden_keyword_found_in_dependent_schemas():
         "dependentSchemas": {"a": {"properties": {"b": {"type": "string", "minLength": 3}}}},
     }
     assert "anthropic-no-minLength" in _ids(lint(schema, "anthropic"))
+
+
+# --- v0.4 structural rules (Cohere TIGHT) exercised directly on dicts ----------
+
+def test_root_must_be_object_cohere():
+    # Root not object -> cohere-root-must-be-object
+    bad = {"type": "array", "items": {"type": "string"}}
+    got = _ids(lint(bad, "cohere"))
+    assert "cohere-root-must-be-object" in got
+    assert has_errors(lint(bad, "cohere"))
+
+
+def test_object_min_one_required_cohere():
+    # Object (root or nested) with properties but empty/missing required -> fires
+    bad_root = {"type": "object", "properties": {"a": {"type": "string"}}}
+    bad_nested = {
+        "type": "object",
+        "properties": {"top": {"type": "object", "properties": {"x": {"type": "string"}}}},
+        "required": ["top"],
+    }
+    assert "cohere-object-min-required" in _ids(lint(bad_root, "cohere"))
+    assert "cohere-object-min-required" in _ids(lint(bad_nested, "cohere"))
+
+
+def test_structural_good_cohere_passes():
+    good = {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {"id": {"type": "string"}},
+        "required": ["id"],
+    }
+    assert not has_errors(lint(good, "cohere"))
