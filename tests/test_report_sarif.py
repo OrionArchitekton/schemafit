@@ -140,3 +140,24 @@ def test_cli_format_sarif_preserves_exit_codes(tmp_path, capsys):
     out2 = capsys.readouterr().out
     assert rc2 == 0
     assert json.loads(out2)["runs"][0]["results"] == []
+
+
+def test_sarif_drift_finding_includes_ruleid_and_doc_url(tmp_path, capsys):
+    """Drift case must produce SARIF with cohere-drift ruleId, and doc_url both
+    in rule helpUri and in the result's properties (for the specific drift finding).
+    """
+    drift_path = "fixtures/drift-mock-bad.json"
+    rc = main(["lint", drift_path, "--provider", "cohere", "--live-verify", "--format", "sarif"])
+    out = capsys.readouterr().out
+    assert rc == 1
+    doc = json.loads(out)
+    run = doc["runs"][0]
+    results = run["results"]
+    assert any(r.get("ruleId") == "cohere-drift" for r in results)
+    drift_res = next(r for r in results if r.get("ruleId") == "cohere-drift")
+    props = drift_res.get("properties", {})
+    assert props.get("doc_url", "").startswith("http")
+    rule_idx = drift_res["ruleIndex"]
+    rule = run["tool"]["driver"]["rules"][rule_idx]
+    assert rule.get("helpUri", "").startswith("http")
+    assert "cohere.com" in rule["helpUri"]

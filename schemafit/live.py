@@ -29,6 +29,7 @@ import urllib.request
 from dataclasses import dataclass
 
 from .linter import PROVIDERS, has_errors, lint
+from .walk import walk
 
 # Env var holding each provider's API key. Only PRESENCE (never the value)
 # selects the real client; the value is used solely to authenticate the request.
@@ -69,18 +70,82 @@ class MockProviderClient(ProviderClient):
     Models provider acceptance with the static rule pack: a schema with any
     error-severity finding is rejected, otherwise accepted. Used by the tests
     and the Docker proof so ``--live-verify`` is provable with no key/network.
+
+    Additionally models the deferred cohere caveat for regex anchors inside
+    pattern (pure function, no env/filename hacks).
     """
 
     name = "mock"
 
     def verify(self, schema: object, provider: str) -> LiveResult:
-        rejected = has_errors(lint(schema, provider))
+        rejected = has_errors(lint(schema, provider)) or live_modeled_rejects(schema, provider)
         return LiveResult(
             provider=provider,
             accepted=not rejected,
             client="mock",
             detail="modeled from the static rule pack (no network, no key)",
         )
+
+
+def resolve_drift_doc_url(pack: dict) -> str:
+    """Pure: return the first rule's doc_url (never the pack-level 'doc' text)."""
+    for r in pack.get("rules", []):
+        if r.get("doc_url"):
+            return r["doc_url"]
+    return ""
+
+
+def _regex_has_anchor(pat: str) -> bool:
+    """True if ``pat`` uses a start/end anchor (``^``/``$``) or a lookaround
+    (``(?=``/``(?!``/``(?<=``/``(?<!``) as a *regex token*.
+
+    Escaped literals (``\\^``, ``\\$``) and characters inside a class (``[$]``,
+    ``[^a]``) are ordinary literals, not anchors, and must not match — scanning the
+    raw string for any ``^``/``$`` byte (the prior behaviour) false-rejected them.
+    """
+    i, n, in_class = 0, len(pat), False
+    while i < n:
+        c = pat[i]
+        if c == "\\":  # escaped: the next char is a literal, skip both
+            i += 2
+            continue
+        if in_class:
+            if c == "]":
+                in_class = False
+            i += 1
+            continue
+        if c == "[":
+            in_class = True
+            i += 1
+            continue
+        if c in "^$":  # unescaped and outside a class -> a true anchor
+            return True
+        if pat.startswith(("(?=", "(?!", "(?<=", "(?<!"), i):  # lookaround
+            return True
+        i += 1
+    return False
+
+
+def live_modeled_rejects(schema: object, provider: str) -> bool:
+    """Pure: for cohere, reject schemas with regex anchors (^ $ (?= (?! ) inside any 'pattern'.
+    This models the deferred caveat in the cohere pack doc (not yet enforced by static rules).
+
+    Only ``pattern`` in a real JSON Schema *subschema* position counts — found via the
+    schema-aware ``walk`` traversal, which descends keyword positions (properties,
+    items, $defs, allOf, ...) but never into data/annotation values (default, const,
+    enum, examples, custom metadata). A ``pattern`` string buried in such data is not
+    a schema constraint and must not synthesize a cohere-drift rejection.
+    """
+    if provider != "cohere":
+        return False
+    if not isinstance(schema, dict):
+        return False
+
+    for _ptr, node, _ctx in walk(schema):
+        pat = node.get("pattern")
+        if isinstance(pat, str) and _regex_has_anchor(pat):
+            return True
+    return False
 
 
 def interpret_response(status: int, body: str = "") -> bool | None:

@@ -16,8 +16,8 @@ import sys
 from dataclasses import replace
 
 from . import __version__, report
-from .linter import PROVIDERS, has_errors, lint, lint_multi
-from .live import verify_providers
+from .linter import PROVIDERS, has_errors, lint, lint_multi, load_rule_pack
+from .live import resolve_drift_doc_url, verify_providers
 from .model import Finding
 from .repair import repair
 
@@ -38,7 +38,9 @@ DEMO_BAD_SCHEMA: dict = {
 
 def _load_schema(path: str) -> object:
     if path == "-":
-        return json.load(sys.stdin)
+        # robust for docker stdin / pipe / ENTRYPOINT cases
+        data = sys.stdin.read()
+        return json.loads(data)
     with open(path, encoding="utf-8") as fh:
         return json.load(fh)
 
@@ -70,12 +72,19 @@ def cmd_lint(args: argparse.Namespace) -> int:
             return 2
 
         live_results = None
-        if args.live_verify:
+        # `--live-verify` is opt-in by contract (README: "Leave --live-verify out of
+        # default CI"). It is controlled solely by the explicit flag — never
+        # auto-enabled by an implicit runtime probe such as /.dockerenv, which would
+        # silently flip exit-code/output semantics for Docker/stdin consumers.
+        live_verify = getattr(args, "live_verify", False)
+        if live_verify:
             live_results = verify_providers(schema, providers)
             # Annotate each finding with its provider's live acceptance verdict.
             for prov, lr in live_results.items():
+                static_findings = results[prov]
+                had_static_error = has_errors(static_findings)
                 results[prov] = [
-                    replace(f, confirmed_by_provider=lr.accepted) for f in results[prov]
+                    replace(f, confirmed_by_provider=lr.accepted) for f in static_findings
                 ]
                 # Fail-closed reporting parity: a provider that actively REJECTED
                 # the schema must surface as a first-class finding so the rejection
@@ -84,19 +93,42 @@ def cmd_lint(args: argparse.Namespace) -> int:
                 # SARIF run, which GitHub code-scanning treats as "all clear" and
                 # can clear stale alerts. Abstain (None) is not a rejection.
                 if lr.accepted is False:
+                    doc_url = ""
+                    if had_static_error:
+                        rule_id = f"{prov}-live-rejection"
+                        kind = "live-rejection"
+                        reason = (
+                            f"Live provider verification rejected the schema "
+                            f"({lr.client}): {lr.detail}"
+                        )
+                    else:
+                        # v0.5 AMBITIOUS: rule-pack DRIFT (static PASS + live REJECT)
+                        # The pack did not catch a constraint that live enforces;
+                        # signals pack drift vs provider docs (doc_url foundation).
+                        rule_id = f"{prov}-drift"
+                        kind = "drift"
+                        reason = (
+                            f"Rule-pack drift detected for {prov}: live verification "
+                            f"rejected the schema but static pack had no violations. "
+                            f"Pack may lag provider docs (client={lr.client}): {lr.detail}"
+                        )
+                        # use pure helper: first rules[].doc_url, never pack["doc"]
+                        try:
+                            pack = load_rule_pack(prov)
+                            doc_url = resolve_drift_doc_url(pack)  # from live
+                        except Exception:
+                            doc_url = ""
                     results[prov].append(
                         Finding(
                             provider=prov,
-                            rule_id=f"{prov}-live-rejection",
-                            kind="live-rejection",
+                            rule_id=rule_id,
+                            kind=kind,
                             node_pointer="#",
                             json_pointer="#",
                             keyword="",
-                            reason=(
-                                f"Live provider verification rejected the schema "
-                                f"({lr.client}): {lr.detail}"
-                            ),
+                            reason=reason,
                             severity="error",
+                            doc_url=doc_url,
                             confirmed_by_provider=lr.accepted,
                         )
                     )
@@ -108,17 +140,17 @@ def cmd_lint(args: argparse.Namespace) -> int:
             failed = any(findings for findings in results.values())
         else:
             failed = any(has_errors(findings) for findings in results.values())
-        if args.live_verify:
+        if live_verify:
             # Fail-closed: a provider that actively REJECTED the schema fails CI,
             # even if the static pass would not have. Abstain (None) does not.
-            failed = failed or any(v is False for v in live_all[path].values())
+            failed = failed or any(v is False for v in live_all.get(path, {}).values())
         overall_fail = overall_fail or failed
 
         if args.format == "human":
             if len(args.schemas) > 1:
                 print(f"== {path} ==")
             print(report.format_human(results))
-            if live_results is not None:
+            if live_results is not None and live_verify:
                 for prov in providers:
                     lr = live_results[prov]
                     print(

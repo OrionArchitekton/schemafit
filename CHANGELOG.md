@@ -4,6 +4,27 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [0.5.0] - 2026-06-28
+
+### Added
+- **Automatic rule-pack drift detection** (AMBITIOUS v0.5 cut per MAP) — when
+  `--live-verify` (mock-default, hermetic) is used and a provider's live verdict
+  rejects while the static pack had no errors, a `*-drift` finding (kind "drift",
+  rule_id e.g. `cohere-drift`) is emitted. Reuses `Finding`, `report.*`, SARIF
+  paths exactly. MockProviderClient extended for hermetic sentinel-driven
+  simulation on dedicated `fixtures/drift-mock-bad.json` (static-clean for
+  cohere + sentinel forces mock reject to model "pack lagged provider docs").
+  Abstain never fails; real calls opt-in via key; doc_url foundation from packs
+  preserved. CLI/docker proofs exercise `cohere-drift` + FAIL exit=1.
+- Version bump 0.4.0 → 0.5.0; tests, ruff, CI sequence, docker all green.
+- No core deps added; no LOCKED-OUT or DEFER items touched.
+
+### Notes
+- Drift completes the live foundation shipped in v0.4 (ProviderClient/Mock +
+  doc_url). All proofs mock-only (no net). HANDOFF posture: PR ready, tag
+  v0.5.0 is publish gate (IRREVERSIBLE).
+- Prior v0.1–v0.4 surfaces unchanged and green; 5-provider matrix intact.
+
 ## [0.4.0] - 2026-06-28
 
 ### Added

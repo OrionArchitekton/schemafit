@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import io
 import json
+import os
+import sys
 
 import pytest
 
@@ -163,7 +166,8 @@ def test_live_only_rejection_surfaces_in_json(monkeypatch, tmp_path, capsys):
     entry = next(iter(payload.values()))["openai"]
     assert entry["status"] == "FAIL"
     rule_ids = {f["rule_id"] for f in entry["findings"]}
-    assert "openai-live-rejection" in rule_ids
+    # v0.5: static-pass + live-reject is now surfaced as *-drift (rule-pack drift)
+    assert "openai-drift" in rule_ids
 
 
 def test_live_only_rejection_surfaces_in_sarif(monkeypatch, tmp_path, capsys):
@@ -192,7 +196,8 @@ def test_live_only_rejection_surfaces_in_sarif(monkeypatch, tmp_path, capsys):
     doc = json.loads(out)
     results = doc["runs"][0]["results"]
     assert results, "SARIF must not be empty when a live rejection fails CI"
-    assert any(r["ruleId"] == "openai-live-rejection" for r in results)
+    # v0.5: static-pass + live-reject surfaces as drift ruleId
+    assert any(r["ruleId"] == "openai-drift" for r in results)
 
 
 def test_live_abstain_does_not_synthesize_finding(monkeypatch, tmp_path, capsys):
@@ -221,3 +226,95 @@ def test_no_live_verify_leaves_static_path_unchanged(tmp_path, capsys):
     assert rc == 1
     assert "LIVE-VERIFY" not in out
     assert "confirmed_by_provider" not in out
+
+
+# --- v0.5 drift detection (rule-pack drift via live on mock) -----------------
+
+def test_cli_drift_mock_bad_produces_drift_finding_and_nonzero_exit(tmp_path, capsys):
+    """Drift case: static-clean schema (for cohere) but mock live reveals violation.
+    (via live_modeled_rejects for anchored pattern in fixture).
+    Expect rule_id containing 'drift', FAIL, exit 1.
+    """
+    # use the committed drift fixture (relative path works from repo root under pytest)
+    rc = main(["lint", "fixtures/drift-mock-bad.json", "--provider", "cohere", "--live-verify"])
+    out = capsys.readouterr().out
+    assert rc == 1, f"expected nonzero for drift case, got {rc}; out={out[:300]}"
+    # must surface a drift finding (ruleId with 'drift')
+    assert "drift" in out.lower() or "cohere-drift" in out
+    assert "FAIL" in out
+    # ensure live verify line appears
+    assert "LIVE-VERIFY" in out or "confirmed_by_provider" in out
+
+
+# --- regression: --live-verify is opt-in; never auto-enabled by the runtime env -
+
+def test_docker_stdin_without_flag_stays_static(monkeypatch, capsys):
+    """`--live-verify` is opt-in by contract. A Dockerized bare `lint -` (no flag)
+    must keep the static default: no implicit /.dockerenv probe may turn live
+    verification on and change exit-code/output semantics for stdin consumers.
+    The schema is static-clean for cohere but carries a real anchor, so if live were
+    wrongly auto-enabled it would synthesize a cohere-drift finding and exit 1.
+    """
+    drift_schema = {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {"id": {"type": "string", "pattern": "^[a-z]+$"}},
+        "required": ["id"],
+    }
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(drift_schema)))
+    # Simulate running inside a container: /.dockerenv "exists".
+    real_exists = os.path.exists
+    monkeypatch.setattr(
+        os.path, "exists", lambda p: True if p == "/.dockerenv" else real_exists(p)
+    )
+    rc = main(["lint", "-", "--provider", "cohere"])
+    out = capsys.readouterr().out
+    assert rc == 0, f"static-clean schema must pass without --live-verify; got {rc}: {out[:200]}"
+    assert "LIVE-VERIFY" not in out
+    assert "drift" not in out.lower()
+    assert "confirmed_by_provider" not in out
+
+
+# --- regression: modeled cohere caveat targets true anchors, not literal ^/$ -----
+
+@pytest.mark.parametrize("pat", [r"\^literal", r"\$literal", "[$]", "[^abc]", r"price\$[0-9]+"])
+def test_live_modeled_rejects_ignores_escaped_and_classed_caret_dollar(pat):
+    """Escaped (`\\^`, `\\$`) or character-class (`[$]`, `[^a]`) carets/dollars are
+    regex literals, not start/end anchors. The modeled cohere caveat must not
+    false-reject a static-clean schema that merely contains them."""
+    schema = {"type": "object", "properties": {"x": {"type": "string", "pattern": pat}}}
+    assert live.live_modeled_rejects(schema, "cohere") is False, f"{pat!r} wrongly rejected"
+
+
+@pytest.mark.parametrize("pat", ["^x", "x$", "^[a-z]+$", "(?=foo)", "(?!bar)"])
+def test_live_modeled_rejects_still_catches_true_anchors(pat):
+    """True anchors/lookarounds remain the modeled cohere caveat -> rejected."""
+    schema = {"type": "object", "properties": {"x": {"type": "string", "pattern": pat}}}
+    assert live.live_modeled_rejects(schema, "cohere") is True, f"{pat!r} should be rejected"
+
+
+@pytest.mark.parametrize(
+    "schema",
+    [
+        # `pattern` buried in a data/annotation value is NOT a schema constraint:
+        {"type": "object", "default": {"pattern": "^literal"}},
+        {"type": "string", "const": {"pattern": "^x$"}},
+        {"type": "string", "enum": [{"pattern": "^a"}, {"pattern": "b$"}]},
+        {"type": "object", "examples": [{"pattern": "^ex"}]},
+        {"x-meta": {"pattern": "^custom$"}},
+    ],
+)
+def test_live_modeled_rejects_ignores_pattern_in_data_positions(schema):
+    """Only a `pattern` *keyword* in a subschema position is a regex constraint.
+    A `pattern` string inside default/const/enum/examples/metadata is data, not a
+    schema rule, and must not synthesize a cohere-drift rejection."""
+    assert live.live_modeled_rejects(schema, "cohere") is False
+
+
+def test_live_modeled_rejects_catches_pattern_in_real_subschema_positions():
+    """A real `pattern` keyword (nested subschema / array items) is still rejected."""
+    nested = {
+        "type": "object",
+        "properties": {"items": {"type": "array", "items": {"pattern": "^[a-z]+$"}}},
+    }
+    assert live.live_modeled_rejects(nested, "cohere") is True
