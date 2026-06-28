@@ -100,6 +100,26 @@ def apply_rule(
             if isinstance(node.get("additionalProperties"), dict):
                 out.append(mk(ptr, _join(ptr, "additionalProperties"), "additionalProperties"))
 
+    elif kind == "root_must_be_object":
+        for ptr, node, _ctx in nodes:
+            # Cohere requires the top-level schema to declare a literal
+            # ``"type": "object"``. An implicit object (only ``properties``,
+            # no ``type``) or a union type (``["object", "null"]``) is rejected
+            # by Cohere at runtime, so it must fail the lint too. Check the raw
+            # ``type`` keyword directly rather than via ``_is_object_schema()``,
+            # which intentionally accepts those broader shapes elsewhere.
+            if ptr == "#" and node.get("type") != "object":
+                json_ptr = _join(ptr, "type") if "type" in node else ptr
+                out.append(mk(ptr, json_ptr, "type"))
+
+    elif kind == "object_min_one_required":
+        for ptr, node, _ctx in nodes:
+            if _is_object_schema(node):
+                req = node.get("required")
+                if not isinstance(req, list) or len(req) == 0:
+                    json_ptr = _join(ptr, "required") if "required" in node else ptr
+                    out.append(mk(ptr, json_ptr, "required"))
+
     else:  # defensive: unknown rule kind in a pack
         raise ValueError(f"unknown rule kind: {kind!r} (rule {rule.get('id')!r})")
 

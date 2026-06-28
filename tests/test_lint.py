@@ -190,3 +190,47 @@ def test_forbidden_keyword_found_in_dependent_schemas():
         "dependentSchemas": {"a": {"properties": {"b": {"type": "string", "minLength": 3}}}},
     }
     assert "anthropic-no-minLength" in _ids(lint(schema, "anthropic"))
+
+
+# --- v0.4 structural rules (Cohere TIGHT) exercised directly on dicts ----------
+
+def test_root_must_be_object_cohere():
+    # Root not object -> cohere-root-must-be-object
+    bad = {"type": "array", "items": {"type": "string"}}
+    got = _ids(lint(bad, "cohere"))
+    assert "cohere-root-must-be-object" in got
+    assert has_errors(lint(bad, "cohere"))
+
+    # Implicit root object (only `properties`, no explicit `type: object`) is
+    # rejected by Cohere at runtime, so it must also be flagged.
+    implicit = {"properties": {"id": {"type": "string"}}, "required": ["id"]}
+    assert "cohere-root-must-be-object" in _ids(lint(implicit, "cohere"))
+    assert has_errors(lint(implicit, "cohere"))
+
+    # Union/nullable root type (`["object", "null"]`) is not a literal
+    # `type: object` and is likewise rejected.
+    union = {"type": ["object", "null"], "properties": {"id": {"type": "string"}}}
+    assert "cohere-root-must-be-object" in _ids(lint(union, "cohere"))
+    assert has_errors(lint(union, "cohere"))
+
+
+def test_object_min_one_required_cohere():
+    # Object (root or nested) with properties but empty/missing required -> fires
+    bad_root = {"type": "object", "properties": {"a": {"type": "string"}}}
+    bad_nested = {
+        "type": "object",
+        "properties": {"top": {"type": "object", "properties": {"x": {"type": "string"}}}},
+        "required": ["top"],
+    }
+    assert "cohere-object-min-required" in _ids(lint(bad_root, "cohere"))
+    assert "cohere-object-min-required" in _ids(lint(bad_nested, "cohere"))
+
+
+def test_structural_good_cohere_passes():
+    good = {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {"id": {"type": "string"}},
+        "required": ["id"],
+    }
+    assert not has_errors(lint(good, "cohere"))

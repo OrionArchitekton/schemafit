@@ -3,11 +3,22 @@
 from __future__ import annotations
 
 import json
+import pathlib
+import tomllib
 
 from schemafit import __version__
 from schemafit.cli import main
 from schemafit.linter import lint_multi
 from schemafit.report import format_sarif, format_sarif_multi
+
+
+def test_runtime_version_matches_pyproject():
+    # The CLI `--version` and SARIF `tool.driver.version` both import
+    # `schemafit.__version__`; a release must not identify itself with a stale
+    # version number that drifts from the packaged metadata.
+    pyproject = pathlib.Path(__file__).resolve().parent.parent / "pyproject.toml"
+    meta = tomllib.loads(pyproject.read_text(encoding="utf-8"))
+    assert __version__ == meta["project"]["version"]
 
 
 def test_sarif_is_valid_2_1_0_document():
