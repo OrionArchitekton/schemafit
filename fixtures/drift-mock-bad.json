@@ -4,6 +4,5 @@
   "properties": {
     "id": {"type": "string"}
   },
-  "required": ["id"],
-  "_schemafit_test_drift": true
+  "required": ["id"]
 }

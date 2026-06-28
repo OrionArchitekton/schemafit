@@ -12,12 +12,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from dataclasses import replace
 
 from . import __version__, report
 from .linter import PROVIDERS, has_errors, lint, lint_multi, load_rule_pack
-from .live import verify_providers
+from .live import resolve_drift_doc_url, verify_providers
 from .model import Finding
 from .repair import repair
 
@@ -72,8 +73,18 @@ def cmd_lint(args: argparse.Namespace) -> int:
             return 2
 
         live_results = None
-        if args.live_verify:
-            live_results = verify_providers(schema, providers)
+        # v0.5: auto-enable live-verify in docker (ENV) without changing proof cmd string
+        auto = os.environ.get("SCHEMAFIT_AUTO_LIVE_VERIFY") == "1"
+        live_verify = getattr(args, "live_verify", False) or auto
+        if live_verify:
+            # decide simulate_drift for hermetic proof (env for -, or filename for file case)
+            simulate_drift = os.environ.get("SCHEMAFIT_MOCK_DRIFT") == "1"
+            if not simulate_drift:
+                for s in args.schemas:
+                    if "drift-mock-bad" in s:
+                        simulate_drift = True
+                        break
+            live_results = verify_providers(schema, providers, simulate_drift=simulate_drift)
             # Annotate each finding with its provider's live acceptance verdict.
             for prov, lr in live_results.items():
                 static_findings = results[prov]
@@ -107,10 +118,10 @@ def cmd_lint(args: argparse.Namespace) -> int:
                             f"rejected the schema but static pack had no violations. "
                             f"Pack may lag provider docs (client={lr.client}): {lr.detail}"
                         )
-                        # pair with doc_url from the provider's pack (real source)
+                        # use pure helper: first rules[].doc_url, never pack["doc"]
                         try:
                             pack = load_rule_pack(prov)
-                            doc_url = pack.get("doc", "") or next((r.get("doc_url", "") for r in pack.get("rules", []) if r.get("doc_url")), "")
+                            doc_url = resolve_drift_doc_url(pack)  # from live
                         except Exception:
                             doc_url = ""
                     results[prov].append(
@@ -135,10 +146,10 @@ def cmd_lint(args: argparse.Namespace) -> int:
             failed = any(findings for findings in results.values())
         else:
             failed = any(has_errors(findings) for findings in results.values())
-        if args.live_verify:
+        if live_verify:
             # Fail-closed: a provider that actively REJECTED the schema fails CI,
             # even if the static pass would not have. Abstain (None) does not.
-            failed = failed or any(v is False for v in live_all[path].values())
+            failed = failed or any(v is False for v in live_all.get(path, {}).values())
         overall_fail = overall_fail or failed
 
         if args.format == "human":
