@@ -95,6 +95,8 @@ def _sarif_run(items: list[tuple[str, Finding]]) -> dict:
         props: dict = {"provider": f.provider, "kind": f.kind, "keyword": f.keyword}
         if f.confirmed_by_provider is not None:
             props["confirmed_by_provider"] = f.confirmed_by_provider
+        if f.doc_url:
+            props["doc_url"] = f.doc_url
         sarif_results.append(
             {
                 "ruleId": f.rule_id,
