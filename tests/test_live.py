@@ -163,7 +163,8 @@ def test_live_only_rejection_surfaces_in_json(monkeypatch, tmp_path, capsys):
     entry = next(iter(payload.values()))["openai"]
     assert entry["status"] == "FAIL"
     rule_ids = {f["rule_id"] for f in entry["findings"]}
-    assert "openai-live-rejection" in rule_ids
+    # v0.5: static-pass + live-reject is now surfaced as *-drift (rule-pack drift)
+    assert "openai-drift" in rule_ids
 
 
 def test_live_only_rejection_surfaces_in_sarif(monkeypatch, tmp_path, capsys):
@@ -192,7 +193,8 @@ def test_live_only_rejection_surfaces_in_sarif(monkeypatch, tmp_path, capsys):
     doc = json.loads(out)
     results = doc["runs"][0]["results"]
     assert results, "SARIF must not be empty when a live rejection fails CI"
-    assert any(r["ruleId"] == "openai-live-rejection" for r in results)
+    # v0.5: static-pass + live-reject surfaces as drift ruleId
+    assert any(r["ruleId"] == "openai-drift" for r in results)
 
 
 def test_live_abstain_does_not_synthesize_finding(monkeypatch, tmp_path, capsys):
@@ -221,3 +223,21 @@ def test_no_live_verify_leaves_static_path_unchanged(tmp_path, capsys):
     assert rc == 1
     assert "LIVE-VERIFY" not in out
     assert "confirmed_by_provider" not in out
+
+
+# --- v0.5 drift detection (rule-pack drift via live on mock) -----------------
+
+def test_cli_drift_mock_bad_produces_drift_finding_and_nonzero_exit(tmp_path, capsys):
+    """Drift case: static-clean schema (for cohere) but mock live reveals violation.
+    Uses sentinel in drift-mock-bad.json to force mock disagree with static pack.
+    Expect rule_id containing 'drift', FAIL, exit 1. (RED until impl)
+    """
+    # use the committed drift fixture (relative path works from repo root under pytest)
+    rc = main(["lint", "fixtures/drift-mock-bad.json", "--provider", "cohere", "--live-verify"])
+    out = capsys.readouterr().out
+    assert rc == 1, f"expected nonzero for drift case, got {rc}; out={out[:300]}"
+    # must surface a drift finding (ruleId with 'drift')
+    assert "drift" in out.lower() or "cohere-drift" in out
+    assert "FAIL" in out
+    # ensure live verify line appears
+    assert "LIVE-VERIFY" in out or "confirmed_by_provider" in out

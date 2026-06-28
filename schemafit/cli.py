@@ -74,8 +74,10 @@ def cmd_lint(args: argparse.Namespace) -> int:
             live_results = verify_providers(schema, providers)
             # Annotate each finding with its provider's live acceptance verdict.
             for prov, lr in live_results.items():
+                static_findings = results[prov]
+                had_static_error = has_errors(static_findings)
                 results[prov] = [
-                    replace(f, confirmed_by_provider=lr.accepted) for f in results[prov]
+                    replace(f, confirmed_by_provider=lr.accepted) for f in static_findings
                 ]
                 # Fail-closed reporting parity: a provider that actively REJECTED
                 # the schema must surface as a first-class finding so the rejection
@@ -84,18 +86,33 @@ def cmd_lint(args: argparse.Namespace) -> int:
                 # SARIF run, which GitHub code-scanning treats as "all clear" and
                 # can clear stale alerts. Abstain (None) is not a rejection.
                 if lr.accepted is False:
+                    if had_static_error:
+                        rule_id = f"{prov}-live-rejection"
+                        kind = "live-rejection"
+                        reason = (
+                            f"Live provider verification rejected the schema "
+                            f"({lr.client}): {lr.detail}"
+                        )
+                    else:
+                        # v0.5 AMBITIOUS: rule-pack DRIFT (static PASS + live REJECT)
+                        # The pack did not catch a constraint that live enforces;
+                        # signals pack drift vs provider docs (doc_url foundation).
+                        rule_id = f"{prov}-drift"
+                        kind = "drift"
+                        reason = (
+                            f"Rule-pack drift detected for {prov}: live verification "
+                            f"rejected the schema but static pack had no violations. "
+                            f"Pack may lag provider docs (client={lr.client}): {lr.detail}"
+                        )
                     results[prov].append(
                         Finding(
                             provider=prov,
-                            rule_id=f"{prov}-live-rejection",
-                            kind="live-rejection",
+                            rule_id=rule_id,
+                            kind=kind,
                             node_pointer="#",
                             json_pointer="#",
                             keyword="",
-                            reason=(
-                                f"Live provider verification rejected the schema "
-                                f"({lr.client}): {lr.detail}"
-                            ),
+                            reason=reason,
                             severity="error",
                             confirmed_by_provider=lr.accepted,
                         )

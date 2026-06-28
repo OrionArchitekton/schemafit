@@ -30,3 +30,10 @@ jobs:
           echo "ok: bad schema correctly failed CI"
       - name: lint must PASS on a clean schema
         run: schemafit lint fixtures/portable-good.json --provider openai,anthropic,gemini,mistral,cohere
+      - name: lint must catch rule-pack drift on mock (v0.5)
+        run: |
+          if schemafit lint fixtures/drift-mock-bad.json --provider cohere --live-verify; then
+            echo "BUG: expected non-zero on drift-mock case" >&2
+            exit 1
+          fi
+          echo "ok: drift-mock correctly failed CI"

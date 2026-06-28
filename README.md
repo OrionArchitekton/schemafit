@@ -177,9 +177,14 @@ Shipped in **v0.4**: Cohere structural rules (top-level must be object + every
 object ≥1 `required` field) via two new `apply_rule` kinds; primary-sourced,
 static, no net, core-deps unchanged.
 
-Deferred (v0.5+): automatic rule-pack **drift detection**; Bedrock/Vertex packs;
-a `pydantic` source-model auto-fix mode; and an npm/`ajv` + Zod port. (See MAP
-for cut-line.)
+Shipped in **v0.5**: automatic rule-pack **drift detection** (AMBITIOUS) on the
+`--live-verify` path (mock-default/hermetic): static pass + live reject emits
+`*-drift` finding (reuses Finding/report/SARIF + doc_url foundation). Proofs
+include `schemafit lint fixtures/drift-mock-bad.json --provider cohere --live-verify`
+(exit 1 + `cohere-drift`).
+
+Deferred (vNext): Bedrock/Vertex packs; a `pydantic` source-model auto-fix mode;
+and an npm/`ajv` + Zod port. (See MAP for cut-line.)
 
 ## License
 

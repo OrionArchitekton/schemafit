@@ -75,6 +75,14 @@ class MockProviderClient(ProviderClient):
 
     def verify(self, schema: object, provider: str) -> LiveResult:
         rejected = has_errors(lint(schema, provider))
+        # v0.5: hermetic drift sim (mock-default). Sentinel makes mock reject
+        # even if static clean (live doc stricter than pack). Test-fixture only.
+        if (
+            isinstance(schema, dict)
+            and schema.get("_schemafit_test_drift")
+            and provider == "cohere"
+        ):
+            rejected = True
         return LiveResult(
             provider=provider,
             accepted=not rejected,
