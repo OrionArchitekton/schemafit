@@ -201,6 +201,18 @@ def test_root_must_be_object_cohere():
     assert "cohere-root-must-be-object" in got
     assert has_errors(lint(bad, "cohere"))
 
+    # Implicit root object (only `properties`, no explicit `type: object`) is
+    # rejected by Cohere at runtime, so it must also be flagged.
+    implicit = {"properties": {"id": {"type": "string"}}, "required": ["id"]}
+    assert "cohere-root-must-be-object" in _ids(lint(implicit, "cohere"))
+    assert has_errors(lint(implicit, "cohere"))
+
+    # Union/nullable root type (`["object", "null"]`) is not a literal
+    # `type: object` and is likewise rejected.
+    union = {"type": ["object", "null"], "properties": {"id": {"type": "string"}}}
+    assert "cohere-root-must-be-object" in _ids(lint(union, "cohere"))
+    assert has_errors(lint(union, "cohere"))
+
 
 def test_object_min_one_required_cohere():
     # Object (root or nested) with properties but empty/missing required -> fires

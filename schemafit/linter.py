@@ -102,8 +102,15 @@ def apply_rule(
 
     elif kind == "root_must_be_object":
         for ptr, node, _ctx in nodes:
-            if ptr == "#" and not _is_object_schema(node):
-                out.append(mk(ptr, ptr, "type"))
+            # Cohere requires the top-level schema to declare a literal
+            # ``"type": "object"``. An implicit object (only ``properties``,
+            # no ``type``) or a union type (``["object", "null"]``) is rejected
+            # by Cohere at runtime, so it must fail the lint too. Check the raw
+            # ``type`` keyword directly rather than via ``_is_object_schema()``,
+            # which intentionally accepts those broader shapes elsewhere.
+            if ptr == "#" and node.get("type") != "object":
+                json_ptr = _join(ptr, "type") if "type" in node else ptr
+                out.append(mk(ptr, json_ptr, "type"))
 
     elif kind == "object_min_one_required":
         for ptr, node, _ctx in nodes:
