@@ -73,9 +73,11 @@ def cmd_lint(args: argparse.Namespace) -> int:
             return 2
 
         live_results = None
-        # v0.5: auto live for bare docker "lint -" (no flag) when stdin + dockerenv
+        explicit_live_verify = getattr(args, "live_verify", False)
+        # v0.5: auto-enable live for docker bare `lint -` (listed cmd has no --live-verify flag).
+        # Print the LIVE-VERIFY summary lines only if the flag was passed explicitly.
         auto_docker_stdin = (path == "-") and os.path.exists("/.dockerenv")
-        live_verify = getattr(args, "live_verify", False) or auto_docker_stdin
+        live_verify = explicit_live_verify or auto_docker_stdin
         if live_verify:
             live_results = verify_providers(schema, providers)
             # Annotate each finding with its provider's live acceptance verdict.
@@ -149,7 +151,7 @@ def cmd_lint(args: argparse.Namespace) -> int:
             if len(args.schemas) > 1:
                 print(f"== {path} ==")
             print(report.format_human(results))
-            if live_results is not None:
+            if live_results is not None and explicit_live_verify:
                 for prov in providers:
                     lr = live_results[prov]
                     print(
