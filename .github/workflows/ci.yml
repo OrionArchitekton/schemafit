@@ -31,6 +31,11 @@ jobs:
       - name: lint must PASS on a clean schema
         run: schemafit lint fixtures/portable-good.json --provider openai,anthropic,gemini,mistral,cohere
       - name: lint must catch rule-pack drift on mock (v0.5)
+        # Pin the hermetic proof to the mock client: clear the provider key so this
+        # step is deterministic regardless of any ambient COHERE_API_KEY secret
+        # (--live-verify selects the real client purely on key presence).
+        env:
+          COHERE_API_KEY: ""
         run: |
           if schemafit lint fixtures/drift-mock-bad.json --provider cohere --live-verify; then
             echo "BUG: expected non-zero on drift-mock case" >&2
