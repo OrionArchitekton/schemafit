@@ -77,13 +77,8 @@ def cmd_lint(args: argparse.Namespace) -> int:
         auto = os.environ.get("SCHEMAFIT_AUTO_LIVE_VERIFY") == "1"
         live_verify = getattr(args, "live_verify", False) or auto
         if live_verify:
-            # decide simulate_drift for hermetic proof (env for -, or filename for file case)
+            # decide simulate_drift for hermetic proof (via SCHEMAFIT_MOCK_DRIFT env)
             simulate_drift = os.environ.get("SCHEMAFIT_MOCK_DRIFT") == "1"
-            if not simulate_drift:
-                for s in args.schemas:
-                    if "drift-mock-bad" in s:
-                        simulate_drift = True
-                        break
             live_results = verify_providers(schema, providers, simulate_drift=simulate_drift)
             # Annotate each finding with its provider's live acceptance verdict.
             for prov, lr in live_results.items():
