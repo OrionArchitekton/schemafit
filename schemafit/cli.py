@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
 from dataclasses import replace
 
@@ -73,11 +72,11 @@ def cmd_lint(args: argparse.Namespace) -> int:
             return 2
 
         live_results = None
-        explicit_live_verify = getattr(args, "live_verify", False)
-        # v0.5: auto-enable live for docker bare `lint -` (listed cmd has no --live-verify flag).
-        # Print the LIVE-VERIFY summary lines only if the flag was passed explicitly.
-        auto_docker_stdin = (path == "-") and os.path.exists("/.dockerenv")
-        live_verify = explicit_live_verify or auto_docker_stdin
+        # `--live-verify` is opt-in by contract (README: "Leave --live-verify out of
+        # default CI"). It is controlled solely by the explicit flag — never
+        # auto-enabled by an implicit runtime probe such as /.dockerenv, which would
+        # silently flip exit-code/output semantics for Docker/stdin consumers.
+        live_verify = getattr(args, "live_verify", False)
         if live_verify:
             live_results = verify_providers(schema, providers)
             # Annotate each finding with its provider's live acceptance verdict.
@@ -151,7 +150,7 @@ def cmd_lint(args: argparse.Namespace) -> int:
             if len(args.schemas) > 1:
                 print(f"== {path} ==")
             print(report.format_human(results))
-            if live_results is not None and explicit_live_verify:
+            if live_results is not None and live_verify:
                 for prov in providers:
                     lr = live_results[prov]
                     print(

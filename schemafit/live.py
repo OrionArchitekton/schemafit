@@ -24,7 +24,6 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
@@ -95,6 +94,37 @@ def resolve_drift_doc_url(pack: dict) -> str:
     return ""
 
 
+def _regex_has_anchor(pat: str) -> bool:
+    """True if ``pat`` uses a start/end anchor (``^``/``$``) or a lookaround
+    (``(?=``/``(?!``/``(?<=``/``(?<!``) as a *regex token*.
+
+    Escaped literals (``\\^``, ``\\$``) and characters inside a class (``[$]``,
+    ``[^a]``) are ordinary literals, not anchors, and must not match — scanning the
+    raw string for any ``^``/``$`` byte (the prior behaviour) false-rejected them.
+    """
+    i, n, in_class = 0, len(pat), False
+    while i < n:
+        c = pat[i]
+        if c == "\\":  # escaped: the next char is a literal, skip both
+            i += 2
+            continue
+        if in_class:
+            if c == "]":
+                in_class = False
+            i += 1
+            continue
+        if c == "[":
+            in_class = True
+            i += 1
+            continue
+        if c in "^$":  # unescaped and outside a class -> a true anchor
+            return True
+        if pat.startswith(("(?=", "(?!", "(?<=", "(?<!"), i):  # lookaround
+            return True
+        i += 1
+    return False
+
+
 def live_modeled_rejects(schema: object, provider: str) -> bool:
     """Pure: for cohere, reject schemas with regex anchors (^ $ (?= (?! ) inside any 'pattern'.
     This models the deferred caveat in the cohere pack doc (not yet enforced by static rules).
@@ -108,7 +138,7 @@ def live_modeled_rejects(schema: object, provider: str) -> bool:
         if isinstance(node, dict):
             pat = node.get("pattern")
             if isinstance(pat, str):
-                if re.search(r'[\^$]|\(\?[! =]', pat):
+                if _regex_has_anchor(pat):
                     return True
             for v in node.values():
                 if _has_anchor(v):

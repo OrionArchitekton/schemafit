@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import io
 import json
+import os
+import sys
 
 import pytest
 
@@ -241,3 +244,50 @@ def test_cli_drift_mock_bad_produces_drift_finding_and_nonzero_exit(tmp_path, ca
     assert "FAIL" in out
     # ensure live verify line appears
     assert "LIVE-VERIFY" in out or "confirmed_by_provider" in out
+
+
+# --- regression: --live-verify is opt-in; never auto-enabled by the runtime env -
+
+def test_docker_stdin_without_flag_stays_static(monkeypatch, capsys):
+    """`--live-verify` is opt-in by contract. A Dockerized bare `lint -` (no flag)
+    must keep the static default: no implicit /.dockerenv probe may turn live
+    verification on and change exit-code/output semantics for stdin consumers.
+    The schema is static-clean for cohere but carries a real anchor, so if live were
+    wrongly auto-enabled it would synthesize a cohere-drift finding and exit 1.
+    """
+    drift_schema = {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {"id": {"type": "string", "pattern": "^[a-z]+$"}},
+        "required": ["id"],
+    }
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(drift_schema)))
+    # Simulate running inside a container: /.dockerenv "exists".
+    real_exists = os.path.exists
+    monkeypatch.setattr(
+        os.path, "exists", lambda p: True if p == "/.dockerenv" else real_exists(p)
+    )
+    rc = main(["lint", "-", "--provider", "cohere"])
+    out = capsys.readouterr().out
+    assert rc == 0, f"static-clean schema must pass without --live-verify; got {rc}: {out[:200]}"
+    assert "LIVE-VERIFY" not in out
+    assert "drift" not in out.lower()
+    assert "confirmed_by_provider" not in out
+
+
+# --- regression: modeled cohere caveat targets true anchors, not literal ^/$ -----
+
+@pytest.mark.parametrize("pat", [r"\^literal", r"\$literal", "[$]", "[^abc]", r"price\$[0-9]+"])
+def test_live_modeled_rejects_ignores_escaped_and_classed_caret_dollar(pat):
+    """Escaped (`\\^`, `\\$`) or character-class (`[$]`, `[^a]`) carets/dollars are
+    regex literals, not start/end anchors. The modeled cohere caveat must not
+    false-reject a static-clean schema that merely contains them."""
+    schema = {"type": "object", "properties": {"x": {"type": "string", "pattern": pat}}}
+    assert live.live_modeled_rejects(schema, "cohere") is False, f"{pat!r} wrongly rejected"
+
+
+@pytest.mark.parametrize("pat", ["^x", "x$", "^[a-z]+$", "(?=foo)", "(?!bar)"])
+def test_live_modeled_rejects_still_catches_true_anchors(pat):
+    """True anchors/lookarounds remain the modeled cohere caveat -> rejected."""
+    schema = {"type": "object", "properties": {"x": {"type": "string", "pattern": pat}}}
+    assert live.live_modeled_rejects(schema, "cohere") is True, f"{pat!r} should be rejected"
