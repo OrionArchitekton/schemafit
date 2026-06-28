@@ -16,7 +16,7 @@ import sys
 from dataclasses import replace
 
 from . import __version__, report
-from .linter import PROVIDERS, has_errors, lint, lint_multi
+from .linter import PROVIDERS, has_errors, lint, lint_multi, load_rule_pack
 from .live import verify_providers
 from .model import Finding
 from .repair import repair
@@ -38,7 +38,9 @@ DEMO_BAD_SCHEMA: dict = {
 
 def _load_schema(path: str) -> object:
     if path == "-":
-        return json.load(sys.stdin)
+        # robust for docker stdin / pipe / ENTRYPOINT cases
+        data = sys.stdin.read()
+        return json.loads(data)
     with open(path, encoding="utf-8") as fh:
         return json.load(fh)
 
@@ -86,6 +88,7 @@ def cmd_lint(args: argparse.Namespace) -> int:
                 # SARIF run, which GitHub code-scanning treats as "all clear" and
                 # can clear stale alerts. Abstain (None) is not a rejection.
                 if lr.accepted is False:
+                    doc_url = ""
                     if had_static_error:
                         rule_id = f"{prov}-live-rejection"
                         kind = "live-rejection"
@@ -104,6 +107,12 @@ def cmd_lint(args: argparse.Namespace) -> int:
                             f"rejected the schema but static pack had no violations. "
                             f"Pack may lag provider docs (client={lr.client}): {lr.detail}"
                         )
+                        # pair with doc_url from the provider's pack (real source)
+                        try:
+                            pack = load_rule_pack(prov)
+                            doc_url = pack.get("doc", "") or next((r.get("doc_url", "") for r in pack.get("rules", []) if r.get("doc_url")), "")
+                        except Exception:
+                            doc_url = ""
                     results[prov].append(
                         Finding(
                             provider=prov,
@@ -114,6 +123,7 @@ def cmd_lint(args: argparse.Namespace) -> int:
                             keyword="",
                             reason=reason,
                             severity="error",
+                            doc_url=doc_url,
                             confirmed_by_provider=lr.accepted,
                         )
                     )

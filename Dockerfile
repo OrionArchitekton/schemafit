@@ -9,5 +9,5 @@ RUN useradd --create-home --uid 10001 schemafit
 USER schemafit
 
 WORKDIR /work
-ENTRYPOINT ["schemafit"]
+ENTRYPOINT ["python", "-m", "schemafit"]
 CMD ["demo"]
