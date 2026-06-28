@@ -291,3 +291,30 @@ def test_live_modeled_rejects_still_catches_true_anchors(pat):
     """True anchors/lookarounds remain the modeled cohere caveat -> rejected."""
     schema = {"type": "object", "properties": {"x": {"type": "string", "pattern": pat}}}
     assert live.live_modeled_rejects(schema, "cohere") is True, f"{pat!r} should be rejected"
+
+
+@pytest.mark.parametrize(
+    "schema",
+    [
+        # `pattern` buried in a data/annotation value is NOT a schema constraint:
+        {"type": "object", "default": {"pattern": "^literal"}},
+        {"type": "string", "const": {"pattern": "^x$"}},
+        {"type": "string", "enum": [{"pattern": "^a"}, {"pattern": "b$"}]},
+        {"type": "object", "examples": [{"pattern": "^ex"}]},
+        {"x-meta": {"pattern": "^custom$"}},
+    ],
+)
+def test_live_modeled_rejects_ignores_pattern_in_data_positions(schema):
+    """Only a `pattern` *keyword* in a subschema position is a regex constraint.
+    A `pattern` string inside default/const/enum/examples/metadata is data, not a
+    schema rule, and must not synthesize a cohere-drift rejection."""
+    assert live.live_modeled_rejects(schema, "cohere") is False
+
+
+def test_live_modeled_rejects_catches_pattern_in_real_subschema_positions():
+    """A real `pattern` keyword (nested subschema / array items) is still rejected."""
+    nested = {
+        "type": "object",
+        "properties": {"items": {"type": "array", "items": {"pattern": "^[a-z]+$"}}},
+    }
+    assert live.live_modeled_rejects(nested, "cohere") is True

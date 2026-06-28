@@ -29,6 +29,7 @@ import urllib.request
 from dataclasses import dataclass
 
 from .linter import PROVIDERS, has_errors, lint
+from .walk import walk
 
 # Env var holding each provider's API key. Only PRESENCE (never the value)
 # selects the real client; the value is used solely to authenticate the request.
@@ -128,28 +129,23 @@ def _regex_has_anchor(pat: str) -> bool:
 def live_modeled_rejects(schema: object, provider: str) -> bool:
     """Pure: for cohere, reject schemas with regex anchors (^ $ (?= (?! ) inside any 'pattern'.
     This models the deferred caveat in the cohere pack doc (not yet enforced by static rules).
+
+    Only ``pattern`` in a real JSON Schema *subschema* position counts — found via the
+    schema-aware ``walk`` traversal, which descends keyword positions (properties,
+    items, $defs, allOf, ...) but never into data/annotation values (default, const,
+    enum, examples, custom metadata). A ``pattern`` string buried in such data is not
+    a schema constraint and must not synthesize a cohere-drift rejection.
     """
     if provider != "cohere":
         return False
     if not isinstance(schema, dict):
         return False
 
-    def _has_anchor(node: object) -> bool:
-        if isinstance(node, dict):
-            pat = node.get("pattern")
-            if isinstance(pat, str):
-                if _regex_has_anchor(pat):
-                    return True
-            for v in node.values():
-                if _has_anchor(v):
-                    return True
-        elif isinstance(node, list):
-            for item in node:
-                if _has_anchor(item):
-                    return True
-        return False
-
-    return _has_anchor(schema)
+    for _ptr, node, _ctx in walk(schema):
+        pat = node.get("pattern")
+        if isinstance(pat, str) and _regex_has_anchor(pat):
+            return True
+    return False
 
 
 def interpret_response(status: int, body: str = "") -> bool | None:
