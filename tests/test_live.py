@@ -227,12 +227,11 @@ def test_no_live_verify_leaves_static_path_unchanged(tmp_path, capsys):
 
 # --- v0.5 drift detection (rule-pack drift via live on mock) -----------------
 
-def test_cli_drift_mock_bad_produces_drift_finding_and_nonzero_exit(tmp_path, capsys, monkeypatch):
+def test_cli_drift_mock_bad_produces_drift_finding_and_nonzero_exit(tmp_path, capsys):
     """Drift case: static-clean schema (for cohere) but mock live reveals violation.
-    (hermetic via SCHEMAFIT_MOCK_DRIFT=1 env to simulate live reject for clean pack).
+    (via live_modeled_rejects for anchored pattern in fixture).
     Expect rule_id containing 'drift', FAIL, exit 1.
     """
-    monkeypatch.setenv("SCHEMAFIT_MOCK_DRIFT", "1")
     # use the committed drift fixture (relative path works from repo root under pytest)
     rc = main(["lint", "fixtures/drift-mock-bad.json", "--provider", "cohere", "--live-verify"])
     out = capsys.readouterr().out

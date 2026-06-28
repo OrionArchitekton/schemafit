@@ -142,11 +142,10 @@ def test_cli_format_sarif_preserves_exit_codes(tmp_path, capsys):
     assert json.loads(out2)["runs"][0]["results"] == []
 
 
-def test_sarif_drift_finding_includes_ruleid_and_doc_url(tmp_path, capsys, monkeypatch):
+def test_sarif_drift_finding_includes_ruleid_and_doc_url(tmp_path, capsys):
     """Drift case must produce SARIF with cohere-drift ruleId, and doc_url both
     in rule helpUri and in the result's properties (for the specific drift finding).
     """
-    monkeypatch.setenv("SCHEMAFIT_MOCK_DRIFT", "1")
     drift_path = "fixtures/drift-mock-bad.json"
     rc = main(["lint", drift_path, "--provider", "cohere", "--live-verify", "--format", "sarif"])
     out = capsys.readouterr().out

@@ -73,13 +73,11 @@ def cmd_lint(args: argparse.Namespace) -> int:
             return 2
 
         live_results = None
-        # v0.5: auto-enable live-verify in docker (ENV) without changing proof cmd string
-        auto = os.environ.get("SCHEMAFIT_AUTO_LIVE_VERIFY") == "1"
-        live_verify = getattr(args, "live_verify", False) or auto
+        # v0.5: auto live for bare docker "lint -" (no flag) when stdin + dockerenv
+        auto_docker_stdin = (path == "-") and os.path.exists("/.dockerenv")
+        live_verify = getattr(args, "live_verify", False) or auto_docker_stdin
         if live_verify:
-            # decide simulate_drift for hermetic proof (via SCHEMAFIT_MOCK_DRIFT env)
-            simulate_drift = os.environ.get("SCHEMAFIT_MOCK_DRIFT") == "1"
-            live_results = verify_providers(schema, providers, simulate_drift=simulate_drift)
+            live_results = verify_providers(schema, providers)
             # Annotate each finding with its provider's live acceptance verdict.
             for prov, lr in live_results.items():
                 static_findings = results[prov]

@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
@@ -69,19 +70,15 @@ class MockProviderClient(ProviderClient):
     Models provider acceptance with the static rule pack: a schema with any
     error-severity finding is rejected, otherwise accepted. Used by the tests
     and the Docker proof so ``--live-verify`` is provable with no key/network.
+
+    Additionally models the deferred cohere caveat for regex anchors inside
+    pattern (pure function, no env/filename hacks).
     """
 
     name = "mock"
 
-    def __init__(self, simulate_drift: bool = False) -> None:
-        self._simulate_drift = simulate_drift
-
     def verify(self, schema: object, provider: str) -> LiveResult:
-        rejected = has_errors(lint(schema, provider))
-        # v0.5: hermetic drift sim (mock-default). Trigger via simulate_drift
-        # (set by env or filename match in cli) to model live doc stricter than pack.
-        if self._simulate_drift and provider == "cohere":
-            rejected = True
+        rejected = has_errors(lint(schema, provider)) or live_modeled_rejects(schema, provider)
         return LiveResult(
             provider=provider,
             accepted=not rejected,
@@ -96,6 +93,33 @@ def resolve_drift_doc_url(pack: dict) -> str:
         if r.get("doc_url"):
             return r["doc_url"]
     return ""
+
+
+def live_modeled_rejects(schema: object, provider: str) -> bool:
+    """Pure: for cohere, reject schemas with regex anchors (^ $ (?= (?! ) inside any 'pattern'.
+    This models the deferred caveat in the cohere pack doc (not yet enforced by static rules).
+    """
+    if provider != "cohere":
+        return False
+    if not isinstance(schema, dict):
+        return False
+
+    def _has_anchor(node: object) -> bool:
+        if isinstance(node, dict):
+            pat = node.get("pattern")
+            if isinstance(pat, str):
+                if re.search(r'[\^$]|\(\?[! =]', pat):
+                    return True
+            for v in node.values():
+                if _has_anchor(v):
+                    return True
+        elif isinstance(node, list):
+            for item in node:
+                if _has_anchor(item):
+                    return True
+        return False
+
+    return _has_anchor(schema)
 
 
 def interpret_response(status: int, body: str = "") -> bool | None:
@@ -226,30 +250,25 @@ class RealHTTPClient(ProviderClient):
         return LiveResult(provider, interpret_response(status, body), provider, detail)
 
 
-def get_client(
-    provider: str, *, allow_real: bool = True, simulate_drift: bool = False
-) -> ProviderClient:
+def get_client(provider: str, *, allow_real: bool = True) -> ProviderClient:
     """Return the real client when the provider key is in the environment (and
     real calls are allowed), else the deterministic mock.
 
     Selection reads only key PRESENCE, never the value. ``allow_real=False``
     forces the mock — used by tests and any hermetic context.
-    simulate_drift: for hermetic drift proofs (env or filename-driven).
     """
     if allow_real and os.environ.get(PROVIDER_KEY_ENV.get(provider, "")):
         return RealHTTPClient(provider)
-    return MockProviderClient(simulate_drift=simulate_drift)
+    return MockProviderClient()
 
 
 def verify_providers(
-    schema: object, providers: list[str], *, allow_real: bool = True, simulate_drift: bool = False
+    schema: object, providers: list[str], *, allow_real: bool = True
 ) -> dict[str, LiveResult]:
     """Run a live acceptance check for each provider; return per-provider results."""
     out: dict[str, LiveResult] = {}
     for provider in providers:
         if provider not in PROVIDERS:
             raise ValueError(f"unknown provider: {provider!r}")
-        out[provider] = get_client(
-            provider, allow_real=allow_real, simulate_drift=simulate_drift
-        ).verify(schema, provider)
+        out[provider] = get_client(provider, allow_real=allow_real).verify(schema, provider)
     return out
