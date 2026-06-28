@@ -20,6 +20,18 @@ so CI fails the PR instead of prod.
 > [`schemafit/rules/`](schemafit/rules/)). It is **not** a runtime client: it
 > makes no model calls, needs no API key, and has **zero runtime dependencies**.
 
+## Proof: 88% of real LLM schemas would be rejected somewhere
+
+I ran schemafit across **50 real, public** structured-output / tool schemas —
+from the OpenAI & Anthropic cookbooks, popular agent frameworks (instructor,
+langchain, pydantic-ai, crewai, …), and official MCP servers. **44 of 50 (88%)
+would be rejected by at least one major provider's constraints, and only 3
+passed all five.** The #1 culprit: `additionalProperties` — the field almost
+nobody sets, which OpenAI strict Structured Outputs *requires* to be `false`.
+
+Full breakdown, per-provider numbers, and how to reproduce it on your own
+schemas: [`benchmarks/`](benchmarks/).
+
 ## Why this and not Instructor / BAML / LiteLLM / Vercel AI SDK?
 
 Those are excellent **runtime** clients — they normalize, repair, or constrain a
