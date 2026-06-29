@@ -52,6 +52,7 @@ select = ["E", "F", "W", "I", "B", "UP", "S", "RUF"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S"]
+"benchmarks/**" = ["S"]  # benchmark/repro scripts call `schemafit` via subprocess
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
