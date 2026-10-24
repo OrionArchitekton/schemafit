@@ -1,7 +1,7 @@
 # schemafit
 
 **Provider-aware structured-output / JSON-Schema CI linter.** Catch the schema
-incompatibilities that make one provider `400` while another succeeds — *before*
+incompatibilities that make one provider `400` while another succeeds, *before*
 they hit production, as a fast, offline CI check.
 
 A JSON Schema / tool definition / `response_format` that works on OpenAI can
@@ -12,29 +12,68 @@ validation keywords (`minLength`, `format`, `pattern`, …), Gemini's lack of
 violated it, so teams hand-port schemas and debug by trial-and-error at runtime.
 
 `schemafit` encodes each provider's documented constraint surface as a
-**versioned, declarative rule pack** and lints your schema statically — pointing
-at the exact JSON-Pointer path, the keyword, and why — with a non-zero exit code
+**versioned, declarative rule pack** and lints your schema statically, pointing
+at the exact JSON-Pointer path, the keyword, and why, with a non-zero exit code
 so CI fails the PR instead of prod.
 
 > Every rule is grounded in a real, cited provider issue (see
-> [`schemafit/rules/`](schemafit/rules/)). It is **not** a runtime client: it
+> [`schemafit/rules/`](https://github.com/OrionArchitekton/schemafit/tree/main/schemafit/rules)). It is **not** a runtime client: it
 > makes no model calls, needs no API key, and has **zero runtime dependencies**.
+
+## Try it in 10 seconds (no setup, no API key)
+
+Paste this into a terminal. It needs [uv](https://docs.astral.sh/uv/), whose `uvx`
+runs schemafit in a throwaway environment. The schema below is valid for OpenAI
+strict mode, but it uses two keywords that other providers reject:
+
+```bash
+echo '{"type":"object","additionalProperties":false,"properties":{"sku":{"type":"string","pattern":"^[A-Z]{3}-[0-9]{4}$"},"qty":{"type":"integer","minimum":1}},"required":["sku","qty"]}' \
+  | uvx schemafit lint - --provider openai,anthropic,gemini,mistral,cohere
+```
+
+Output from schemafit 0.5.1 (exit code 1, so a CI job fails here). Version 0.5.0
+prints the same findings with a different separator after PASS/FAIL:
+
+```
+[openai] PASS: 0 error(s), 0 warning(s)
+[anthropic] FAIL: 2 error(s), 0 warning(s)
+  ERROR   #/properties/qty/minimum  (anthropic-no-minimum)
+          Anthropic rejects the 'minimum' validation keyword (400 Bad Request).
+          ref: https://github.com/vercel/ai/issues/13355
+  ERROR   #/properties/sku/pattern  (anthropic-no-pattern)
+          Anthropic rejects the 'pattern' validation keyword (400 Bad Request).
+          ref: https://github.com/vercel/ai/issues/13355
+[gemini] PASS: 0 error(s), 0 warning(s)
+[mistral] PASS: 0 error(s), 0 warning(s)
+[cohere] FAIL: 1 error(s), 0 warning(s)
+  ERROR   #/properties/qty/minimum  (cohere-no-minimum)
+          Cohere structured outputs do not support the 'minimum' numeric range keyword.
+          ref: https://docs.cohere.com/docs/structured-outputs
+```
+
+No uv? `pip install schemafit` (Python 3.11+), then run the same line without
+`uvx`. To get a provider-valid variant, swap `lint ... --provider ...` for
+`repair - --provider anthropic`; it prints the fixed schema and counts which
+fixes drop a constraint (`lossy=`).
 
 ## Proof: 88% of real LLM schemas would be rejected somewhere
 
-I ran schemafit across **50 real, public** structured-output / tool schemas —
+I ran schemafit across **50 real, public** structured-output / tool schemas
 from the OpenAI & Anthropic cookbooks, popular agent frameworks (instructor,
 langchain, pydantic-ai, crewai, …), and official MCP servers. **44 of 50 (88%)
 would be rejected by at least one major provider's constraints, and only 3
-passed all five.** The #1 culprit: `additionalProperties` — the field almost
+passed all five.** The #1 culprit: `additionalProperties`, the field almost
 nobody sets, which OpenAI strict Structured Outputs *requires* to be `false`.
+That rule drives the headline: the 44 are exactly the schemas OpenAI strict mode
+rejects. If you don't use strict mode, the numbers that matter are Anthropic
+(6 of 50) and Cohere (13 of 50).
 
 Full breakdown, per-provider numbers, and how to reproduce it on your own
-schemas: [`benchmarks/`](benchmarks/).
+schemas: [`benchmarks/`](https://github.com/OrionArchitekton/schemafit/tree/main/benchmarks).
 
 ## Why this and not Instructor / BAML / LiteLLM / Vercel AI SDK?
 
-Those are excellent **runtime** clients — they normalize, repair, or constrain a
+Those are excellent **runtime** clients: they normalize, repair, or constrain a
 schema *at call-time*. `schemafit` fills the gap they leave: a **static,
 pre-ship CI lint** that fails the build before the schema ever reaches a
 provider, over the raw schemas you already ship, with no DSL or codegen buy-in.
@@ -42,16 +81,17 @@ provider, over the raw schemas you already ship, with no DSL or codegen buy-in.
 ## Install
 
 ```bash
-# From source (works today):
-pip install "git+https://github.com/OrionArchitekton/schemafit"
-# or build and run the container:
-docker build -t schemafit . && docker run --rm schemafit demo
+pip install schemafit     # Python 3.11+, zero runtime dependencies
+schemafit demo            # offline self-check; ends with PROOF_OK
 ```
 
-Once the first release is tagged (`v0.1.0`), `pip install schemafit` (PyPI) and
-`docker run --rm ghcr.io/orionarchitekton/schemafit demo` (GHCR) become
-available — both are published by the release workflow on a `v*` tag (PyPI via
-Trusted Publishing; image to GHCR).
+Other ways to run it:
+
+```bash
+uvx schemafit --help                                             # no install (needs uv)
+docker run --rm ghcr.io/orionarchitekton/schemafit demo          # container image
+pip install "git+https://github.com/OrionArchitekton/schemafit"  # unreleased main branch
+```
 
 ## Usage
 
@@ -79,24 +119,12 @@ schemafit providers
 schemafit demo
 ```
 
-Example:
-
-```
-$ schemafit lint order.json --provider anthropic
-[anthropic] FAIL — 2 error(s), 0 warning(s)
-  ERROR   #/properties/sku/pattern  (anthropic-no-pattern)
-          Anthropic rejects the 'pattern' validation keyword (400 Bad Request).
-          ref: https://github.com/vercel/ai/issues/13355
-  ERROR   #/properties/qty/minimum  (anthropic-no-minimum)
-          Anthropic rejects the 'minimum' validation keyword (400 Bad Request).
-```
-
 ## Use in CI
 
 GitHub Actions (this repo ships a composite action):
 
 ```yaml
-- uses: OrionArchitekton/schemafit@v0.1.0
+- uses: OrionArchitekton/schemafit@v0.5.0
   with:
     schema: schemas/tool.json
     providers: openai,anthropic,gemini
@@ -106,14 +134,14 @@ Or directly / as a pre-commit hook (`.pre-commit-hooks.yaml` is included):
 
 ```yaml
 - repo: https://github.com/OrionArchitekton/schemafit
-  rev: v0.1.0
+  rev: v0.5.0
   hooks:
     - id: schemafit
       args: ["--provider", "openai,anthropic,gemini"]
       files: '^schemas/.*\.json$'   # scope to YOUR LLM schemas, not every .json
 ```
 
-> Scope the hook with `files:` to the directory holding your LLM schemas — the
+> Scope the hook with `files:` to the directory holding your LLM schemas; the
 > default `types: [json]` would otherwise lint every JSON file in the repo
 > (`package.json`, `tsconfig.json`, lockfiles), which are not LLM schemas.
 
@@ -140,29 +168,29 @@ empty `results` array, which clears stale alerts):
 accepted/rejected it"* by sending a minimal structured-output probe to each
 provider and **failing closed** on a rejection. It is **opt-in and key-gated**:
 
-- **Default = MOCK** — with no provider key in the environment it uses a
+- **Default = MOCK**: with no provider key in the environment it uses a
   deterministic, network-free client modeled on the static rule pack, so CI and
   the Docker image run it with **no key and no network**.
-- **Real call** — only when the provider's key (`OPENAI_API_KEY`,
+- **Real call**: only when the provider's key (`OPENAI_API_KEY`,
   `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`) is present in the environment. Real calls
   use the standard library (no new dependency); the `[live]` extra is reserved for
   optional provider SDKs.
-- **Tri-state** — `confirmed_by_provider` is `true` (accepted), `false` (rejected
+- **Tri-state**: `confirmed_by_provider` is `true` (accepted), `false` (rejected
   → exit 1), or `null` (abstained: no key / rate-limited / network error).
   Abstaining is **not** a rejection and never fails CI.
 
 > Never commit an API key. The real path reads keys only from the environment and
 > never echoes their value. Leave `--live-verify` out of default CI.
 
-## Supported providers (v0.3 — 5-provider matrix)
+## Supported providers
 
 | Provider | Checks (grounded in) |
 |---|---|
 | `openai` | `additionalProperties:false` required; all properties required; no `default`; no `oneOf` in array items ([openai-agents-python#474](https://github.com/openai/openai-agents-python/issues/474), [claude-task-master#1522](https://github.com/eyaltoledano/claude-task-master/issues/1522)) |
-| `anthropic` | 13 rejected validation keywords on the **strict structured-output surface**: `minLength`/`maxLength`/`pattern`/`format`/`minimum`/`maximum`/`exclusiveMinimum`/`exclusiveMaximum`/`minItems`/`maxItems`/`uniqueItems`/`minProperties`/`maxProperties` ([vercel/ai#13355](https://github.com/vercel/ai/issues/13355), [anthropic-sdk-python#1034](https://github.com/anthropics/anthropic-sdk-python/issues/1034)). General Messages-API tool `input_schema` is more permissive — run this pack against schemas you send on the structured-output path. |
-| `gemini` | **Portability warnings** (version-sensitive, non-failing by default): `anyOf` (rejected by ≤2.0 / old SDKs, supported by 2.5), `oneOf`, open dict (`additionalProperties` schema), `$ref` recursion. Gemini's schema support changed fast (`anyOf` Jan 2026, `additionalProperties` Nov 2025), so these *warn* — use `--strict` to gate on them. ([python-genai#460](https://github.com/googleapis/python-genai/issues/460), [docs](https://ai.google.dev/gemini-api/docs/structured-output)) |
-| `mistral` *(new in v0.3)* | Strict custom structured-output conventions: `additionalProperties:false` required and every property listed in `required`. **Thin pack** — Mistral's docs do not enumerate a per-keyword unsupported list, so no keyword-blocklist rules are invented; these two rules are *example-derived* from the official sample. Notes (not lint rules): the request must use `response_format: json_schema` with `strict:true`, and all models except `codestral-mamba` are supported. ([Mistral custom structured output](https://docs.mistral.ai/capabilities/structured-output/custom_structured_output/)) |
-| `cohere` *(new in v0.3)* | Hard-error unsupported structured-output keywords from Cohere's keyword-support table: composition `allOf`/`oneOf`/`not`; numeric ranges `minimum`/`maximum`; array-length `minItems`/`maxItems`; string-length `minLength`/`maxLength`; `uniqueItems` (marked unsupported for both structured-output columns — allowed only under regular Tool Use with `strict_tools=False`). Supported and **not** flagged: `anyOf`, `$ref`/`$def`, `enum`, `const`, `pattern`. Structural (v0.4): top-level schema must be `type: object`; every object (incl. nested) must specify ≥1 `required` field. Caveat (still not a rule): regex anchors (`^`, `$`, `?=`, `?!`) *inside* a `pattern` are unsupported — anchor detection needs value-inspection and remains deferred. Primary-sourced to [docs.cohere.com/docs/structured-outputs](https://docs.cohere.com/docs/structured-outputs). |
+| `anthropic` | 13 rejected validation keywords on the **strict structured-output surface**: `minLength`/`maxLength`/`pattern`/`format`/`minimum`/`maximum`/`exclusiveMinimum`/`exclusiveMaximum`/`minItems`/`maxItems`/`uniqueItems`/`minProperties`/`maxProperties` ([vercel/ai#13355](https://github.com/vercel/ai/issues/13355), [anthropic-sdk-python#1034](https://github.com/anthropics/anthropic-sdk-python/issues/1034)). General Messages-API tool `input_schema` is more permissive, so run this pack against schemas you send on the structured-output path. |
+| `gemini` | **Portability warnings** (version-sensitive, non-failing by default): `anyOf` (rejected by ≤2.0 / old SDKs, supported by 2.5), `oneOf`, open dict (`additionalProperties` schema), `$ref` recursion. Gemini's schema support changed fast (`anyOf` Jan 2026, `additionalProperties` Nov 2025), so these *warn*; use `--strict` to gate on them. ([python-genai#460](https://github.com/googleapis/python-genai/issues/460), [docs](https://ai.google.dev/gemini-api/docs/structured-output)) |
+| `mistral` *(new in v0.3)* | Strict custom structured-output conventions: `additionalProperties:false` required and every property listed in `required`. **Thin pack**: Mistral's docs do not enumerate a per-keyword unsupported list, so no keyword-blocklist rules are invented; these two rules are *example-derived* from the official sample. Notes (not lint rules): the request must use `response_format: json_schema` with `strict:true`, and all models except `codestral-mamba` are supported. ([Mistral custom structured output](https://docs.mistral.ai/capabilities/structured-output/custom_structured_output/)) |
+| `cohere` *(new in v0.3)* | Hard-error unsupported structured-output keywords from Cohere's keyword-support table: composition `allOf`/`oneOf`/`not`; numeric ranges `minimum`/`maximum`; array-length `minItems`/`maxItems`; string-length `minLength`/`maxLength`; `uniqueItems` (marked unsupported for both structured-output columns; allowed only under regular Tool Use with `strict_tools=False`). Supported and **not** flagged: `anyOf`, `$ref`/`$def`, `enum`, `const`, `pattern`. Structural (v0.4): top-level schema must be `type: object`; every object (incl. nested) must specify ≥1 `required` field. Caveat (still not a rule): regex anchors (`^`, `$`, `?=`, `?!`) *inside* a `pattern` are unsupported; anchor detection needs value-inspection and remains deferred. Primary-sourced to [docs.cohere.com/docs/structured-outputs](https://docs.cohere.com/docs/structured-outputs). |
 
 ## Exit codes
 
@@ -183,20 +211,20 @@ Shipped in **v0.2**: SARIF output for GitHub code-scanning; the `--live-verify`
 opt-in live-confirmation mode (MOCK by default, key-gated real calls, fail-closed).
 
 Shipped in **v0.3**: the **Mistral** and **Cohere** provider rule packs (provider
-matrix 3 → 5) — both static, network-free, and core-dependency-free.
+matrix 3 → 5), both static, network-free, and core-dependency-free.
 
 Shipped in **v0.4**: Cohere structural rules (top-level must be object + every
 object ≥1 `required` field) via two new `apply_rule` kinds; primary-sourced,
 static, no net, core-deps unchanged.
 
-Shipped in **v0.5**: automatic rule-pack **drift detection** (AMBITIOUS) on the
+Shipped in **v0.5**: automatic rule-pack **drift detection** on the
 `--live-verify` path (mock-default/hermetic): static pass + live reject emits
 `*-drift` finding (reuses Finding/report/SARIF + doc_url foundation). Proofs
 include `schemafit lint fixtures/drift-mock-bad.json --provider cohere --live-verify`
 (exit 1 + `cohere-drift`).
 
 Deferred (vNext): Bedrock/Vertex packs; a `pydantic` source-model auto-fix mode;
-and an npm/`ajv` + Zod port. (See MAP for cut-line.)
+and an npm/`ajv` + Zod port.
 
 ## License
 

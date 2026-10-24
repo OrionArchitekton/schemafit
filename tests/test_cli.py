@@ -127,3 +127,21 @@ def test_deeply_nested_schema_exits_2_not_traceback(tmp_path):
     path.write_text(text, encoding="utf-8")
     rc = main(["lint", str(path), "--provider", "anthropic"])
     assert rc == 2
+
+
+def test_human_output_and_help_use_no_long_dashes(tmp_path, capsys):
+    # The human report and --help text get pasted into READMEs and launch posts,
+    # so they stick to ASCII punctuation (no em/en dashes).
+    path = _write(
+        tmp_path, {"type": "object", "properties": {"n": {"type": "string", "minLength": 1}}}
+    )
+    main(["lint", path, "--provider", "openai,anthropic"])
+    out = capsys.readouterr().out
+    assert "[anthropic] FAIL: " in out
+    try:
+        main(["lint", "--help"])
+    except SystemExit:
+        pass
+    out += capsys.readouterr().out
+    long_dashes = {chr(0x2014), chr(0x2013), chr(0x2015)}  # em, en, horizontal bar
+    assert not long_dashes & set(out)

@@ -23,7 +23,7 @@ def format_human(results: dict[str, list[Finding]]) -> str:
         errs = [f for f in findings if f.severity == "error"]
         warns = [f for f in findings if f.severity != "error"]
         lines.append(
-            f"[{provider}] {_status(findings)} — {len(errs)} error(s), {len(warns)} warning(s)"
+            f"[{provider}] {_status(findings)}: {len(errs)} error(s), {len(warns)} warning(s)"
         )
         for f in findings:
             lines.append(f"  {f.severity.upper():<7} {f.json_pointer}  ({f.rule_id})")
