@@ -259,7 +259,7 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help=(
             "opt-in: confirm the schema against each provider via a mockable client "
-            "(MOCK default — no network/key; real call only when the provider's API key "
+            "(MOCK default: no network/key; real call only when the provider's API key "
             "is in the env). Fails closed on a provider rejection."
         ),
     )

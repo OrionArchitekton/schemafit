@@ -4,6 +4,26 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [0.5.1] - Unreleased
+
+### Changed
+- Human-readable `lint` output now puts a colon after the PASS/FAIL status
+  (`[anthropic] FAIL: 2 error(s), 0 warning(s)`) instead of a long dash, so the
+  output pastes cleanly into docs, issues, and plain-ASCII terminals. The
+  `--live-verify` help text gets the same fix. JSON and SARIF output are
+  unchanged, and exit codes are unchanged.
+
+### Docs
+- README install section reflects that schemafit is published on PyPI
+  (`pip install schemafit`) and GHCR; the old "once the first release is
+  tagged" text is gone.
+- README gains a no-setup demo: one `uvx` command that lints an inline schema
+  against all five providers, with its real output.
+- GitHub Action and pre-commit examples pinned to `v0.5.0` (was `v0.1.0`).
+- README links to `benchmarks/` and `schemafit/rules/` are absolute, so they
+  resolve on the PyPI project page.
+- New `docs/launch/`: Show HN draft and draft tag notes for this release.
+
 ## [0.5.0] - 2026-06-28
 
 ### Added
