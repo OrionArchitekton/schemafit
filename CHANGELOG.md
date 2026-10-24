@@ -4,7 +4,7 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
-## [0.5.1] - Unreleased
+## [0.5.1] - 2026-10-24
 
 ### Changed
 - Human-readable `lint` output now puts a colon after the PASS/FAIL status
@@ -22,6 +22,8 @@ All notable changes to this project are documented here. The format follows
 - GitHub Action and pre-commit examples pinned to `v0.5.0` (was `v0.1.0`).
 - README links to `benchmarks/` and `schemafit/rules/` are absolute, so they
   resolve on the PyPI project page.
+- README notes that the 88% headline is the OpenAI strict-mode number, and
+  gives the Anthropic and Cohere numbers for teams not using strict mode.
 - New `docs/launch/`: Show HN draft and draft tag notes for this release.
 
 ## [0.5.0] - 2026-06-28

@@ -3,11 +3,11 @@
 Status: DRAFT for Dan to edit and post. Planned for Wed Oct 28, 2026.
 Not posted anywhere.
 
-## Title (76 chars, HN limit is 80)
+## Title (chosen; 76 chars, HN limit is 80)
 
 Show HN: Schemafit, a linter for JSON schemas that LLM providers will reject
 
-Alternates:
+Alternates (not used):
 
 - Show HN: Schemafit, catch LLM schema 400s in CI before they hit production (74)
 - Show HN: Lint your LLM tool schemas against OpenAI, Anthropic, Gemini rules (75)

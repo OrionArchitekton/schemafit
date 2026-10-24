@@ -64,6 +64,9 @@ langchain, pydantic-ai, crewai, …), and official MCP servers. **44 of 50 (88%)
 would be rejected by at least one major provider's constraints, and only 3
 passed all five.** The #1 culprit: `additionalProperties`, the field almost
 nobody sets, which OpenAI strict Structured Outputs *requires* to be `false`.
+That rule drives the headline: the 44 are exactly the schemas OpenAI strict mode
+rejects. If you don't use strict mode, the numbers that matter are Anthropic
+(6 of 50) and Cohere (13 of 50).
 
 Full breakdown, per-provider numbers, and how to reproduce it on your own
 schemas: [`benchmarks/`](https://github.com/OrionArchitekton/schemafit/tree/main/benchmarks).
