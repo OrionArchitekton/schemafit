@@ -31,7 +31,8 @@ echo '{"type":"object","additionalProperties":false,"properties":{"sku":{"type":
   | uvx schemafit lint - --provider openai,anthropic,gemini,mistral,cohere
 ```
 
-Output (exit code 1, so a CI job fails here):
+Output from schemafit 0.5.1 (exit code 1, so a CI job fails here). Version 0.5.0
+prints the same findings with a different separator after PASS/FAIL:
 
 ```
 [openai] PASS: 0 error(s), 0 warning(s)
